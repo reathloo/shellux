@@ -36,6 +36,55 @@ shell_quote() {
   printf "'"
 }
 
+sources_integration() {
+  awk -v file="shellux.$shell_name" '
+    /^[[:space:]]*#/ { next }
+    /^[[:space:]]*(source|\.)[[:space:]]/ && index($0, file) { found = 1 }
+    END { exit !found }
+  ' "$rc_file"
+}
+
+sources_bashrc() {
+  awk '
+    /^[[:space:]]*#/ { next }
+    index($0, ".bashrc") && /(^|[;[:space:]])(source|\.)[[:space:]]/ { found = 1 }
+    END { exit !found }
+  ' "$1"
+}
+
+configure_bash_login() {
+  for candidate in .bash_profile .bash_login; do
+    if [ -f "$HOME/$candidate" ]; then
+      login_file="$HOME/$candidate"
+      break
+    fi
+  done
+  if [ -z "${login_file:-}" ]; then
+    login_file="$HOME/.bash_profile"
+    if [ -f "$HOME/.profile" ]; then
+      printf '%s\n' '[ -f "$HOME/.profile" ] && . "$HOME/.profile"' >> "$login_file"
+      if sources_bashrc "$HOME/.profile"; then
+        return
+      fi
+    fi
+  fi
+  touch "$login_file"
+  if sources_bashrc "$login_file"; then
+    return
+  fi
+  if [ -f "$HOME/.profile" ] && grep -F '. "$HOME/.profile"' "$login_file" >/dev/null 2>&1 && sources_bashrc "$HOME/.profile"; then
+    return
+  fi
+  {
+    printf '\n%s\n' '# >>> shellux bash login >>>'
+    printf '%s\n' 'if [ -f "$HOME/.bashrc" ]; then'
+    printf '%s\n' '  . "$HOME/.bashrc"'
+    printf '%s\n' 'fi'
+    printf '%s\n' '# <<< shellux bash login <<<'
+  } >> "$login_file"
+  printf '%s\n' "Shellux made $login_file load .bashrc"
+}
+
 configure_shell() {
   current_shell=${SHELL:-}
   shell_name=${current_shell##*/}
@@ -59,20 +108,22 @@ configure_shell() {
   install -d "$rc_dir"
   touch "$rc_file"
 
-  if grep -F "$integration_file" "$rc_file" >/dev/null 2>&1; then
+  if sources_integration; then
     printf '%s\n' "Shellux is already configured in $rc_file"
-    return
+  else
+    quoted_prefix=$(shell_quote "$prefix")
+    quoted_integration=$(shell_quote "$integration_file")
+    {
+      printf '\n%s\n' '# >>> shellux >>>'
+      printf 'export PATH=%s/bin:$PATH\n' "$quoted_prefix"
+      printf 'source %s\n' "$quoted_integration"
+      printf '%s\n' '# <<< shellux <<<'
+    } >> "$rc_file"
+    printf '%s\n' "Shellux was added to $rc_file"
   fi
-
-  quoted_prefix=$(shell_quote "$prefix")
-  quoted_integration=$(shell_quote "$integration_file")
-  {
-    printf '\n%s\n' '# >>> shellux >>>'
-    printf 'export PATH=%s/bin:$PATH\n' "$quoted_prefix"
-    printf 'source %s\n' "$quoted_integration"
-    printf '%s\n' '# <<< shellux <<<'
-  } >> "$rc_file"
-  printf '%s\n' "Shellux was added to $rc_file"
+  if [ "$shell_name" = bash ]; then
+    configure_bash_login
+  fi
 }
 
 printf '%s\n' "Shellux was installed to $prefix/bin/shellux"
