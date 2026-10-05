@@ -1,0 +1,25 @@
+# Go build and test artifacts
+/bin/
+/dist/
+/shellux
+*.exe
+*.test
+*.out
+*.coverprofile
+*.prof
+*.pprof
+
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+
+# Editor and operating-system files
+.vscode/
+.idea/
+*.code-workspace
+.DS_Store
+
+# Temporary files
+/tmp/
+/coverage/

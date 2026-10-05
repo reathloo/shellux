@@ -1,0 +1,49 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+
+      - name: Install Zsh on Linux
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y zsh
+
+      - name: Verify dependencies
+        run: go mod verify
+      - name: Check Go formatting
+        run: test -z "$(gofmt -l cmd internal tools)"
+      - name: Validate theme packages
+        run: go run ./tools/theme-pack -check
+      - name: Test Go
+        run: go test ./...
+      - name: Check for data races
+        run: go test -race ./...
+      - name: Vet Go
+        run: go vet ./...
+      - name: Test shell integration
+        run: sh shell/shellux_test.sh
+      - name: Test release installer
+        run: sh scripts/install_test.sh
+      - name: Build Shellux
+        run: go build -o "$RUNNER_TEMP/shellux" ./cmd/shellux
+      - name: Test interactive settings
+        run: python3 shell/settings_pty_test.py "$RUNNER_TEMP/shellux"

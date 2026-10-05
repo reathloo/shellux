@@ -1,0 +1,135 @@
+{
+  "format": 1,
+  "themes": [
+    {
+      "name": "anime-face",
+      "version": "1.0.0",
+      "size": 44037,
+      "sha256": "64239b6eeb444643b4be1532b780c85859fcfa8dd947d3a7a1f813ce1c7c1422",
+      "package": "packages/anime-face-1.0.0.shellux-theme",
+      "background": "#100317",
+      "style": {
+        "secondary": "#d5a3b7",
+        "accent": "#fef5fa",
+        "muted": "#8b6e87"
+      }
+    },
+    {
+      "name": "heart",
+      "version": "1.0.0",
+      "size": 1370,
+      "sha256": "e0534c82bda34c540f1512d19f1099771cf3eced93e1880f2c20879380d54869",
+      "package": "packages/heart-1.0.0.shellux-theme",
+      "background": "#1b0d15",
+      "style": {
+        "secondary": "#df5d56",
+        "accent": "#ffa39e",
+        "muted": "#9f5961"
+      }
+    },
+    {
+      "name": "liqudemetall",
+      "version": "1.0.0",
+      "size": 33493,
+      "sha256": "899fdf3f0a6f585fce97df657920f16e051a87849b81bc129969926b4f689ea6",
+      "package": "packages/liqudemetall-1.0.0.shellux-theme",
+      "background": "#11131c",
+      "style": {
+        "secondary": "#716eaa",
+        "accent": "#d9c3d4",
+        "muted": "#648797"
+      }
+    },
+    {
+      "name": "loopingliqude",
+      "version": "1.0.0",
+      "size": 43536,
+      "sha256": "242aa5f09fda6d4a606936d4b936d3e1e2798bb25ccd0917a01be9cb135279cd",
+      "package": "packages/loopingliqude-1.0.0.shellux-theme",
+      "background": "#17191f",
+      "style": {
+        "secondary": "#89bafd",
+        "accent": "#d0f8fe",
+        "muted": "#8d7368"
+      }
+    },
+    {
+      "name": "orangedragon",
+      "version": "1.0.0",
+      "size": 11160,
+      "sha256": "4ac03f5ece9e0869c726b0b58e5505aa2fb570c753518de74b756e5876b33abc",
+      "package": "packages/orangedragon-1.0.0.shellux-theme",
+      "background": "#1e1210",
+      "style": {
+        "secondary": "#ffaf00",
+        "accent": "#ff8700",
+        "muted": "#5f87af"
+      }
+    },
+    {
+      "name": "orb",
+      "version": "1.0.0",
+      "size": 98409,
+      "sha256": "bd891c35fe3dd3370c8a6c7f535a5db8818620a48b00fc7c617f20d82d06f99c",
+      "package": "packages/orb-1.0.0.shellux-theme",
+      "background": "#0b1420",
+      "style": {
+        "secondary": "#3e35e3",
+        "accent": "#bc6ad1",
+        "muted": "#699392"
+      }
+    },
+    {
+      "name": "pinkcat",
+      "version": "1.0.0",
+      "size": 11326,
+      "sha256": "59bd349bbf856ee7ac5e1da07a94ace2600085cc4df80df682c1611c63c844e5",
+      "package": "packages/pinkcat-1.0.0.shellux-theme",
+      "background": "#24121d",
+      "style": {
+        "secondary": "#fe8dae",
+        "accent": "#ffcad6",
+        "muted": "#995143"
+      }
+    },
+    {
+      "name": "purplemonster",
+      "version": "1.0.0",
+      "size": 9746,
+      "sha256": "456381d87192a732d11de048e9f2fa8bba07768160b7a27cb567396be4b19b4b",
+      "package": "packages/purplemonster-1.0.0.shellux-theme",
+      "background": "#140d20",
+      "style": {
+        "secondary": "#af87ff",
+        "accent": "#d787ff",
+        "muted": "#5f5f87"
+      }
+    },
+    {
+      "name": "slotmaschine",
+      "version": "1.0.0",
+      "size": 589769,
+      "sha256": "b5f1cb2d620cde9a76fc062482e6ff2d462e4a14d9d26d9d31e22cbe0d18d5a1",
+      "package": "packages/slotmaschine-1.0.0.shellux-theme",
+      "background": "#100d12",
+      "style": {
+        "secondary": "#f04d5b",
+        "accent": "#ffd369",
+        "muted": "#a496a9"
+      }
+    },
+    {
+      "name": "spiderboy",
+      "version": "1.0.0",
+      "size": 48911,
+      "sha256": "6df81042d868db0511a3a73da143d56835fe92481ec68c7a6af4264fe8dc5e71",
+      "package": "packages/spiderboy-1.0.0.shellux-theme",
+      "background": "#0c1018",
+      "style": {
+        "secondary": "#af3846",
+        "accent": "#db4957",
+        "muted": "#6c6a7a"
+      }
+    }
+  ]
+}

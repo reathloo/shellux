@@ -1,0 +1,59 @@
+version: 2
+
+project_name: shellux
+
+builds:
+  - id: darwin
+    main: ./cmd/shellux
+    binary: shellux
+    goos: [darwin]
+    goarch: [amd64, arm64]
+    env: [CGO_ENABLED=1]
+    flags: [-trimpath]
+    ldflags:
+      - -s -w -X github.com/reathloo/shellux/internal/version.Value={{.Version}}
+
+  - id: linux
+    main: ./cmd/shellux
+    binary: shellux
+    goos: [linux]
+    goarch: [amd64, arm64]
+    env: [CGO_ENABLED=0]
+    flags: [-trimpath]
+    ldflags:
+      - -s -w -X github.com/reathloo/shellux/internal/version.Value={{.Version}}
+
+archives:
+  - ids: [darwin, linux]
+    formats: [tar.gz]
+    name_template: >-
+      {{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+    files:
+      - src: shell/shellux.zsh
+        dst: shell/shellux.zsh
+      - src: shell/shellux.bash
+        dst: shell/shellux.bash
+      - src: scripts/install.sh
+        dst: .
+        strip_parent: true
+      - LICENSE
+      - NOTICE
+      - README.md
+
+checksum:
+  name_template: checksums.txt
+  algorithm: sha256
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
+      - '^chore:'
+
+release:
+  draft: true
+
+snapshot:
+  version_template: '{{ incpatch .Version }}-next'
