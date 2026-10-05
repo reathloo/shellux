@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/reathloo/shellux/internal/locale"
 	"github.com/reathloo/shellux/internal/themepack"
 )
 
@@ -46,6 +47,7 @@ func availableThemes() map[string]SavedTheme {
 
 // Config contains the user-facing Shellux settings.
 type Config struct {
+	Language        string                `json:"language,omitempty"`
 	Background      string                `json:"background,omitempty"`
 	Animation       string                `json:"animation"`
 	Style           string                `json:"style"`
@@ -57,6 +59,7 @@ type Config struct {
 func Default() Config {
 	base := availableThemes()["shelluxdefault"]
 	return Config{
+		Language:        "auto",
 		Background:      base.Background,
 		Animation:       base.Animation,
 		Style:           base.Style,
@@ -397,6 +400,9 @@ func writeDefault(settings Config) (string, error) {
 }
 
 func (c Config) Validate() error {
+	if !locale.Valid(c.Language) {
+		return fmt.Errorf("unsupported language %q", c.Language)
+	}
 	if err := validateMenu(c.Visible); err != nil {
 		return err
 	}

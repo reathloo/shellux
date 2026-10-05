@@ -14,6 +14,7 @@ import (
 
 	"github.com/reathloo/shellux/internal/animation"
 	"github.com/reathloo/shellux/internal/config"
+	"github.com/reathloo/shellux/internal/locale"
 	"github.com/reathloo/shellux/internal/systeminfo"
 	"github.com/reathloo/shellux/internal/theme"
 )
@@ -96,7 +97,13 @@ func HeaderWithConfig(snapshot systeminfo.Snapshot, eye string, colors theme.The
 }
 
 // NewHeaderLayout prepares the eye and dashboard as separate terminal regions.
-func NewHeaderLayout(snapshot systeminfo.Snapshot, eye string, colors theme.Theme, visible map[string]bool) HeaderLayout {
+func NewHeaderLayout(snapshot systeminfo.Snapshot, eye string, colors theme.Theme, visible map[string]bool, languages ...locale.Language) HeaderLayout {
+	lang := locale.English
+	if len(languages) > 0 {
+		lang = languages[0]
+	}
+	snapshot.Memory.Pressure = lang.Text(snapshot.Memory.Pressure)
+	snapshot.Temperature.State = lang.Text(snapshot.Temperature.State)
 	show := func(name string) bool {
 		return config.Shown(visible, name)
 	}
@@ -104,7 +111,7 @@ func NewHeaderLayout(snapshot systeminfo.Snapshot, eye string, colors theme.Them
 	dashboard := []string{dashboardTitle(colors, snapshot.Now, show("time"))}
 	appendSection := func(title string, items []string) {
 		if len(items) > 0 {
-			dashboard = append(dashboard, "", sectionStart(colors, title))
+			dashboard = append(dashboard, "", sectionStart(colors, lang.Text(title)))
 			dashboard = append(dashboard, items...)
 			dashboard = append(dashboard, sectionEnd(colors))
 		}
@@ -112,17 +119,17 @@ func NewHeaderLayout(snapshot systeminfo.Snapshot, eye string, colors theme.Them
 	var items []string
 	add := func(name, label, value string) {
 		if config.EntryShown(visible, name) {
-			items = append(items, dashboardItem(colors, label, value))
+			items = append(items, dashboardItem(colors, lang.Text(label), value))
 		}
 	}
 	add("platform", "platform", snapshot.System.Platform+" · "+snapshot.System.Architecture+" · "+snapshot.System.Hostname)
 	add("shell", "shell", snapshot.System.Shell+" · "+snapshot.System.Terminal)
 	add("uptime", "uptime", uptimeValue(snapshot.Uptime))
-	add("date", "date", dateValueParts(snapshot.Now, snapshot.Timezone, show("date.value"), show("date.timezone"), show("date.utc")))
+	add("date", "date", dateValueParts(snapshot.Now, snapshot.Timezone, show("date.value"), show("date.timezone"), show("date.utc"), lang))
 	add("hostname", "hostname", availableText(snapshot.System.Hostname))
 	appendSection("SYSTEM", items)
 	items = nil
-	add("network-status", "status", networkStatusValueParts(snapshot.Network, show("network-status.value"), show("network-status.interface"), show("network-status.ip"), show("network-status.connection"), show("network-status.name")))
+	add("network-status", "status", networkStatusValueParts(snapshot.Network, show("network-status.value"), show("network-status.interface"), show("network-status.ip"), show("network-status.connection"), show("network-status.name"), lang))
 	add("network-traffic", "traffic", networkTrafficValue(snapshot.Network, show("network-traffic.upload"), show("network-traffic.download"), show("network-traffic.latency")))
 	add("ip", "ip", availableText(snapshot.Network.IPAddress))
 	appendSection("NETWORK", items)
@@ -130,7 +137,7 @@ func NewHeaderLayout(snapshot systeminfo.Snapshot, eye string, colors theme.Them
 	if config.EntryShown(visible, "cpu") {
 		metricsShown := show("cpu.bar") || show("cpu.percent") || show("cpu.value")
 		if metricsShown {
-			add("cpu", "cpu", cpuValueParts(snapshot.CPU, show("cpu.bar"), show("cpu.percent"), show("cpu.value")))
+			add("cpu", "cpu", cpuValueParts(snapshot.CPU, show("cpu.bar"), show("cpu.percent"), show("cpu.value"), lang))
 		}
 		if show("cpu.top") {
 			if metricsShown {
@@ -140,11 +147,11 @@ func NewHeaderLayout(snapshot systeminfo.Snapshot, eye string, colors theme.Them
 			}
 		}
 	}
-	add("cores", "cores", coresValue(snapshot.CPU, show("cores.bar"), show("cores.percent"), show("cores.value")))
+	add("cores", "cores", coresValue(snapshot.CPU, show("cores.bar"), show("cores.percent"), show("cores.value"), lang))
 	add("ram", "memory", memoryWithPressure(snapshot.Memory, show("ram.bar"), show("ram.percent"), show("ram.value"), show("ram.pressure")))
 	add("volume", "volume", volumeValueParts(snapshot.Volume, show("volume.bar"), show("volume.percent"), show("volume.value")))
 	if config.EntryShown(visible, "battery") {
-		battery := batteryValueParts(snapshot.Battery, show("battery.bar"), show("battery.percent"), show("battery.value"), show("battery.remaining"))
+		battery := batteryValueParts(snapshot.Battery, show("battery.bar"), show("battery.percent"), show("battery.value"), show("battery.remaining"), lang)
 		if show("temperature") {
 			battery += " · " + temperatureValue(snapshot.Temperature)
 		}
@@ -156,7 +163,7 @@ func NewHeaderLayout(snapshot systeminfo.Snapshot, eye string, colors theme.Them
 	items = nil
 	add("directory", "path", compactDirectory(snapshot.Directory))
 	hasTrack := snapshot.Playback.Available && snapshot.Playback.Title != ""
-	spotify := "No song playing"
+	spotify := lang.Text("No song playing")
 	progress := "N/A"
 	if hasTrack {
 		spotify = snapshot.Playback.Artist + " — " + snapshot.Playback.Title
@@ -371,10 +378,18 @@ func availableText(value string) string {
 	return value
 }
 
-func dateValueParts(now time.Time, timezone string, value, zone, utc bool) string {
+func dateValueParts(now time.Time, timezone string, value, zone, utc bool, languages ...locale.Language) string {
+	lang := locale.English
+	if len(languages) > 0 {
+		lang = languages[0]
+	}
 	var parts []string
 	if value {
-		parts = append(parts, now.Format("02.01.2006"))
+		format := "2006-01-02"
+		if lang == locale.German {
+			format = "02.01.2006"
+		}
+		parts = append(parts, now.Format(format))
 	}
 	if zone {
 		parts = append(parts, availableText(timezone))
@@ -414,13 +429,17 @@ func volumeValueParts(volume systeminfo.Volume, bar, percent, value bool) string
 	return usageValue(percentage, fmt.Sprintf("%.1f / %.1f GB", float64(volume.Used)/1e9, float64(volume.Total)/1e9), bar, percent, value)
 }
 
-func networkStatusValueParts(network systeminfo.Network, status, iface, ip, connection, name bool) string {
+func networkStatusValueParts(network systeminfo.Network, status, iface, ip, connection, name bool, languages ...locale.Language) string {
+	lang := locale.English
+	if len(languages) > 0 {
+		lang = languages[0]
+	}
 	if !network.Connected {
-		return "Nicht verbunden"
+		return lang.Text("Disconnected")
 	}
 	var parts []string
 	if status {
-		parts = append(parts, "Verbunden")
+		parts = append(parts, lang.Text("Connected"))
 	}
 	if connection {
 		parts = append(parts, availableText(network.Connection))
@@ -503,10 +522,14 @@ func rateValue(bytesPerSecond uint64) string {
 }
 
 // coresValue shows the logical core count and measured total utilization.
-func coresValue(cpu systeminfo.CPU, bar, percent, value bool) string {
+func coresValue(cpu systeminfo.CPU, bar, percent, value bool, languages ...locale.Language) string {
+	lang := locale.English
+	if len(languages) > 0 {
+		lang = languages[0]
+	}
 	detail := "N/A"
 	if cpu.Cores > 0 {
-		detail = fmt.Sprintf("%d cores", cpu.Cores)
+		detail = fmt.Sprintf("%d %s", cpu.Cores, lang.Text("cores"))
 	}
 	if cpu.UsageAvailable {
 		return usageValue(cpu.UsagePercent, detail, bar, percent, value)
@@ -521,12 +544,16 @@ func coresValue(cpu systeminfo.CPU, bar, percent, value bool) string {
 	return strings.Join(parts, " ")
 }
 
-func cpuValueParts(cpu systeminfo.CPU, bar, percent, value bool) string {
+func cpuValueParts(cpu systeminfo.CPU, bar, percent, value bool, languages ...locale.Language) string {
+	lang := locale.English
+	if len(languages) > 0 {
+		lang = languages[0]
+	}
 	if cpu.Cores < 1 {
 		return "N/A"
 	}
 	percentage := min(100, cpu.LoadAverage/float64(cpu.Cores)*100)
-	return usageValue(percentage, fmt.Sprintf("%.2f load", cpu.LoadAverage), bar, percent, value)
+	return usageValue(percentage, fmt.Sprintf("%.2f %s", cpu.LoadAverage, lang.Text("load")), bar, percent, value)
 }
 
 // usageValue joins enabled components without leaving empty punctuation.
@@ -571,7 +598,11 @@ func temperatureValue(temperature systeminfo.Temperature) string {
 	return fmt.Sprintf("%.0f°C", temperature.Celsius)
 }
 
-func batteryValueParts(battery systeminfo.Battery, bar, percent, charging, remaining bool) string {
+func batteryValueParts(battery systeminfo.Battery, bar, percent, charging, remaining bool, languages ...locale.Language) string {
+	lang := locale.English
+	if len(languages) > 0 {
+		lang = languages[0]
+	}
 	if !battery.Available {
 		return "N/A"
 	}
@@ -586,7 +617,7 @@ func batteryValueParts(battery systeminfo.Battery, bar, percent, charging, remai
 		if battery.Charging {
 			parts = append(parts, "⚡")
 		} else if !bar && !percent {
-			parts = append(parts, "Not charging")
+			parts = append(parts, lang.Text("Not charging"))
 		}
 	}
 	if remaining {

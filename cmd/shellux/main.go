@@ -17,6 +17,7 @@ import (
 	"github.com/reathloo/shellux/internal/animation"
 	"github.com/reathloo/shellux/internal/config"
 	"github.com/reathloo/shellux/internal/live"
+	"github.com/reathloo/shellux/internal/locale"
 	"github.com/reathloo/shellux/internal/render"
 	"github.com/reathloo/shellux/internal/settingsui"
 	"github.com/reathloo/shellux/internal/systeminfo"
@@ -123,7 +124,7 @@ func main() {
 
 	emitBackground(settings.Background)
 	if *watch {
-		watchHeader(*interval, settings.Visible, *inPlace, *parentPID, selectedAnimation, selectedStyle)
+		watchHeader(*interval, settings.Visible, *inPlace, *parentPID, selectedAnimation, selectedStyle, locale.Resolve(settings.Language))
 		return
 	}
 
@@ -132,7 +133,7 @@ func main() {
 		fmt.Fprintf(os.Stderr, "shellux: collect system information: %v\n", err)
 		os.Exit(1)
 	}
-	layout := render.NewHeaderLayout(snapshot, animation.Frame(selectedAnimation, 0), selectedStyle, settings.Visible)
+	layout := render.NewHeaderLayout(snapshot, animation.Frame(selectedAnimation, 0), selectedStyle, settings.Visible, locale.Resolve(settings.Language))
 	if *reserveHeader {
 		if rows, columns, sizeErr := terminal.Size(os.Stdout.Fd()); sizeErr == nil {
 			layout = layout.FitTerminal(columns, rows)
@@ -583,7 +584,7 @@ func isAnimation(name string) bool {
 	return false
 }
 
-func watchHeader(interval time.Duration, visible map[string]bool, inPlace bool, parentPID int, selectedAnimation animation.Animation, selectedStyle theme.Theme) {
+func watchHeader(interval time.Duration, visible map[string]bool, inPlace bool, parentPID int, selectedAnimation animation.Animation, selectedStyle theme.Theme, language locale.Language) {
 	signalContext, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	ctx, cancel := context.WithCancel(signalContext)
@@ -622,7 +623,7 @@ func watchHeader(interval time.Duration, visible map[string]bool, inPlace bool, 
 		snapshotMu.RLock()
 		currentSnapshot := snapshot
 		snapshotMu.RUnlock()
-		layout := render.NewHeaderLayout(currentSnapshot, animation.Frame(selectedAnimation, frame), selectedStyle, visible)
+		layout := render.NewHeaderLayout(currentSnapshot, animation.Frame(selectedAnimation, frame), selectedStyle, visible, language)
 		if inPlace {
 			layout = layout.FitTerminal(columns, rows)
 		}

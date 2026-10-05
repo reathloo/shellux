@@ -119,7 +119,7 @@ func (m *model) saveDraft() tea.Cmd {
 }
 func (m *model) commitDraft() tea.Cmd {
 	if err := m.save(m.draft.Clone()); err != nil {
-		m.notice = "Could not save: " + friendly(err)
+		m.notice = m.tr("Could not save: ") + m.tr(friendly(err))
 		return nil
 	}
 	return m.finish(Saved)
@@ -142,7 +142,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.cancelDownload()
 		m.cancelDownload = nil
 		if msg.err != nil {
-			m.notice = "Could not download: " + friendly(msg.err)
+			m.notice = m.tr("Could not download: ") + m.tr(friendly(msg.err))
 			return m, nil
 		}
 		return m, m.commitDraft()
@@ -252,7 +252,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.focus == 1 && m.section == 1 {
 				r := m.selectedRow()
 				if r.custom {
-					m.modal = &dialog{kind: "confirm", title: fmt.Sprintf("Delete custom theme %q?", r.value), action: "delete", value: r.value}
+					m.modal = &dialog{kind: "confirm", title: fmt.Sprintf(m.tr("Delete custom theme %q?"), r.value), action: "delete", value: r.value}
 				} else {
 					m.notice = "Catalog themes are protected."
 				}
@@ -320,28 +320,28 @@ func (m *model) rows() []row {
 	case 1:
 		rows := []row{}
 		for _, t := range m.draft.ThemeOptions() {
-			desc := fmt.Sprintf("Animation: %s · Style: %s · Background: %s", t.Animation, t.Style, config.DisplayBackground(t.Background))
+			desc := fmt.Sprintf(m.tr("Animation: %s · Style: %s · Background: %s"), t.Animation, t.Style, config.DisplayBackground(t.Background))
 			if t.Custom {
-				desc += " · Delete: remove custom theme"
+				desc += m.tr(" · Delete: remove custom theme")
 			}
 			mark := "[ ]"
 			if m.draft.Animation == t.Animation && config.DisplayStyle(m.draft.Style) == t.Style && m.draft.Background == t.Background {
 				mark = "[x]"
 			}
-			kind := "built-in"
+			kind := m.tr("built-in")
 			if e, ok := themepack.Lookup(t.Name); ok {
 				kind = fmt.Sprintf("Download · %.0f KB", float64(e.Size)/1024)
-				desc += " · Downloaded only when you save."
+				desc += m.tr(" · Downloaded only when you save.")
 				if themepack.IsInstalled(t.Name) {
-					kind = "Installed"
+					kind = m.tr("Installed")
 				}
 			}
 			if t.Custom {
-				kind = "custom"
+				kind = m.tr("custom")
 			}
 			rows = append(rows, row{label: mark + " " + t.Name + " · " + kind, action: "theme", value: t.Name, color: t.Background, custom: t.Custom, description: desc})
 		}
-		rows = append(rows, row{label: "Random combination", action: "random", description: "Combine an animation with a random style and matching background."}, row{label: "Save current combination as a theme…", action: "new", description: fmt.Sprintf("Current: %s · %s · %s. Save as a custom theme.", m.draft.Animation, config.DisplayStyle(m.draft.Style), m.draft.BackgroundName())})
+		rows = append(rows, row{label: "Random combination", action: "random", description: "Combine an animation with a random style and matching background."}, row{label: "Save current combination as a theme…", action: "new", description: fmt.Sprintf(m.tr("Current: %s · %s · %s. Save as a custom theme."), m.draft.Animation, config.DisplayStyle(m.draft.Style), m.draft.BackgroundName())})
 		return rows
 	case 2:
 		return []row{
@@ -350,7 +350,7 @@ func (m *model) rows() []row {
 			{label: "Background", action: "background", value: m.draft.BackgroundName(), color: m.draft.Background, description: "Named colors, theme backgrounds, profile color or a custom RGB color."},
 		}
 	default:
-		return []row{{label: "Refresh interval", action: "interval", value: m.draft.RefreshInterval, description: "A positive Go duration, such as 1s, 500ms or 2.5s."}}
+		return []row{{label: "Refresh interval", action: "interval", value: m.draft.RefreshInterval, description: "A positive Go duration, such as 1s, 500ms or 2.5s."}, {label: "Language", action: "language", value: languageName(m.draft.Language), description: "Choose the dashboard and settings language. Automatic follows your system locale."}}
 	}
 }
 func (m *model) selectedRow() row {
@@ -398,32 +398,35 @@ func (m *model) activate() tea.Cmd {
 		if err != nil {
 			m.notice = friendly(err)
 		} else {
-			m.notice = fmt.Sprintf("Random: %s · %s · %s", m.draft.Animation, config.DisplayStyle(m.draft.Style), m.draft.BackgroundName())
+			m.notice = fmt.Sprintf(m.tr("Random: %s · %s · %s"), m.draft.Animation, config.DisplayStyle(m.draft.Style), m.draft.BackgroundName())
 		}
 	case "new":
 		return m.openInput("Save custom theme", "theme", "", "Name: a–z, 0–9 and hyphens, up to 32 characters")
 	case "interval":
 		return m.openInput("Refresh interval", "interval", m.draft.RefreshInterval, "1s or 500ms")
-	case "animation", "style", "background":
+	case "animation", "style", "background", "language":
 		options := []choice{}
 		current := ""
 		switch r.action {
+		case "language":
+			current = m.draft.Language
+			options = []choice{{label: "Automatic (system)", value: "auto"}, {label: "English", value: "en"}, {label: "Deutsch", value: "de"}}
 		case "animation":
 			current = m.draft.Animation
 			for _, v := range config.Animations() {
-				options = append(options, choice{label: packageLabel(v), value: v})
+				options = append(options, choice{label: m.packageLabel(v), value: v})
 			}
 		case "style":
 			current = config.DisplayStyle(m.draft.Style)
 			for _, v := range config.Styles() {
-				options = append(options, choice{label: packageLabel(v), value: v})
+				options = append(options, choice{label: m.packageLabel(v), value: v})
 			}
 		case "background":
 			current = m.draft.Background
 			for _, v := range m.draft.BackgroundOptions() {
 				label := v.Name
 				if strings.HasPrefix(label, "Theme: ") {
-					label = "Theme: " + packageLabel(strings.TrimPrefix(label, "Theme: "))
+					label = "Theme: " + m.packageLabel(strings.TrimPrefix(label, "Theme: "))
 				}
 				options = append(options, choice{label: label, value: v.Color, color: v.Color})
 			}
@@ -444,7 +447,7 @@ func (m *model) activate() tea.Cmd {
 func (m *model) openInput(title, field, value, placeholder string) tea.Cmd {
 	input := textinput.New()
 	input.Prompt = "> "
-	input.Placeholder = placeholder
+	input.Placeholder = m.tr(placeholder)
 	input.CharLimit = 64
 	input.SetWidth(min(52, m.width-12))
 	input.SetVirtualCursor(true)
@@ -532,7 +535,7 @@ func (m *model) confirmInput() bool {
 			return false
 		}
 		if _, exists := m.draft.Themes[name]; exists {
-			m.modal = &dialog{kind: "confirm", title: fmt.Sprintf("Overwrite custom theme %q?", name), action: "overwrite", value: name}
+			m.modal = &dialog{kind: "confirm", title: fmt.Sprintf(m.tr("Overwrite custom theme %q?"), name), action: "overwrite", value: name}
 			return false
 		}
 		m.draft = test
@@ -588,10 +591,10 @@ func (m *model) refreshCatalog() tea.Cmd {
 	}
 }
 
-func packageLabel(name string) string {
+func (m *model) packageLabel(name string) string {
 	if e, ok := themepack.Lookup(name); ok {
 		if themepack.IsInstalled(name) {
-			return name + " · Installed"
+			return name + " · " + m.tr("Installed")
 		}
 		return fmt.Sprintf("%s · Download %.0f KB", name, float64(e.Size)/1024)
 	}

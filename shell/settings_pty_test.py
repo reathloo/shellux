@@ -49,7 +49,7 @@ def check_shell(shell):
         entry = next(e for e in catalog["themes"] if e["name"] == "orb")
         shutil.copyfile(REPO / "themes" / entry["package"], fixture_dir / Path(entry["package"]).name)
         (fixture_dir / "orb.installed.json").write_text(json.dumps({"format": 1, "themes": [entry]}))
-        test_env = {**os.environ, "XDG_CONFIG_HOME": directory, "XDG_DATA_HOME": data_dir,
+        test_env = {**os.environ, "XDG_CONFIG_HOME": directory, "XDG_DATA_HOME": data_dir, "LC_ALL": "C",
                     "SHELLUX_THEME_CATALOG_URL": "https://127.0.0.1:1/catalog.json"}
         names = subprocess.check_output([BINARY, "animations"], env=test_env, text=True).splitlines()[1:]
         orb_index = [n.strip() for n in names].index("orb")

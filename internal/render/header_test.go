@@ -25,7 +25,7 @@ func TestHeaderIncludesMetrics(t *testing.T) {
 		Now:         time.Date(2026, 9, 18, 17, 42, 31, 0, time.Local),
 	})
 
-	for _, expected := range []string{"S H E L L U X", "17:42:31", "SYSTEM", "PLATFORM", "macOS · arm64 · Air", "SHELL", "zsh · Terminal", "UPTIME", "2h 5m", "NETWORK", "Verbunden · en0", "192.168.1.24", "UP 2.0 MB/s DOWN 512 KB/s", "RESOURCES", "CPU", "MEMORY", "75%", "42°C", "80% ⚡", "SESSION", "projects", "SPOTIFY", "Daft Punk — Get Lucky", "1:24", "6:09"} {
+	for _, expected := range []string{"S H E L L U X", "17:42:31", "SYSTEM", "PLATFORM", "macOS · arm64 · Air", "SHELL", "zsh · Terminal", "UPTIME", "2h 5m", "NETWORK", "Connected · en0", "192.168.1.24", "UP 2.0 MB/s DOWN 512 KB/s", "RESOURCES", "CPU", "MEMORY", "75%", "42°C", "80% ⚡", "SESSION", "projects", "SPOTIFY", "Daft Punk — Get Lucky", "1:24", "6:09"} {
 		if !strings.Contains(output, expected) {
 			t.Fatalf("Header() does not contain %q:\n%s", expected, output)
 		}
@@ -106,13 +106,13 @@ func TestVolumeValueIncludesBarAndPercentage(t *testing.T) {
 
 func TestNetworkValues(t *testing.T) {
 	connected := systeminfo.Network{Connected: true, Interface: "en0", IPAddress: "192.168.1.24", UploadRate: 2 * 1024 * 1024, DownloadRate: 512 * 1024}
-	if got, want := networkStatusValueParts(connected, true, true, true, false, false), "Verbunden · en0 · 192.168.1.24"; got != want {
+	if got, want := networkStatusValueParts(connected, true, true, true, false, false), "Connected · en0 · 192.168.1.24"; got != want {
 		t.Fatalf("networkStatusValueParts() = %q, want %q", got, want)
 	}
 	if got, want := networkTrafficValue(connected, true, true, false), "UP 2.0 MB/s DOWN 512 KB/s"; got != want {
 		t.Fatalf("networkTrafficValue() = %q, want %q", got, want)
 	}
-	if got, want := networkStatusValueParts(systeminfo.Network{}, true, true, true, false, false), "Nicht verbunden"; got != want {
+	if got, want := networkStatusValueParts(systeminfo.Network{}, true, true, true, false, false), "Disconnected"; got != want {
 		t.Fatalf("networkStatusValueParts() disconnected = %q, want %q", got, want)
 	}
 }
@@ -362,7 +362,7 @@ func TestNewHeaderComponentsAndSharedSlot(t *testing.T) {
 		{"cpu", map[string]string{"top": "worker (145%)"}},
 		{"ram", map[string]string{"pressure": "Warning"}},
 		{"battery", map[string]string{"bar": "████░░░░", "percent": "50%", "value": "⚡", "remaining": "~3h 25m"}},
-		{"network-status", map[string]string{"value": "Verbunden", "interface": "en0", "ip": "192.168.1.2", "connection": "Wi-Fi", "name": "Home"}},
+		{"network-status", map[string]string{"value": "Connected", "interface": "en0", "ip": "192.168.1.2", "connection": "Wi-Fi", "name": "Home"}},
 	} {
 		for part, want := range tc.details {
 			visible := config.Default().Visible
@@ -532,7 +532,7 @@ func TestDateComponentsRenderIndependently(t *testing.T) {
 			text string
 			want bool
 		}{
-			{"27.09.2026", mask&1 != 0}, {"Berlin", mask&2 != 0}, {"UTC+02:00", mask&4 != 0}, {"DATE", mask != 0}, {"SYSTEM", mask != 0},
+			{"2026-09-27", mask&1 != 0}, {"Berlin", mask&2 != 0}, {"UTC+02:00", mask&4 != 0}, {"DATE", mask != 0}, {"SYSTEM", mask != 0},
 		} {
 			if strings.Contains(output, tc.text) != tc.want {
 				t.Fatalf("mask %d: %s in %q", mask, tc.text, output)
@@ -637,7 +637,7 @@ func TestAlternativeEntriesUseSnapshotValues(t *testing.T) {
 	for _, entry := range []struct{ name, title, value string }{
 		{"hostname", "SYSTEM", "dev-machine"}, {"cores", "RESOURCES", "8"},
 		{"ip", "NETWORK", "192.168.1.42"},
-		{"date", "SYSTEM", "26.09.2026"},
+		{"date", "SYSTEM", "2026-09-26"},
 	} {
 		t.Run(entry.name, func(t *testing.T) {
 			visible := config.Default().Visible

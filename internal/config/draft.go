@@ -23,6 +23,8 @@ func (c Config) Clone() Config {
 func (c *Config) ChangeAppearance(field, value string) error {
 	next := c.Clone()
 	switch field {
+	case "language":
+		next.Language = normalizeName(value)
 	case "animation":
 		next.Animation = canonicalThemeName(value)
 	case "style":

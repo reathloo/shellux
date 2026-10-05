@@ -43,6 +43,9 @@ shellux settings
 
 Explore **Menu items**, **Themes**, **Appearance**, and **General** to choose what
 appears, select themes, set custom colors, and change the refresh interval.
+Under **General → Language**, choose **Automatic (system)**, **English**, or
+**Deutsch** for the dashboard and settings. Automatic uses the system/terminal
+locale, with English as the fallback for other languages. Commands stay unchanged.
 
 ![Shellux settings with navigation and individually configurable menu items](docs/images/shellux-settings.png)
 

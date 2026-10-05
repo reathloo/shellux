@@ -41,15 +41,15 @@ func (m *model) View() tea.View {
 	styles := m.styles()
 	var block string
 	if m.small() {
-		text := "Shellux · Settings\n\nResize the window to at least 64 × 18.\nYour changes are preserved.\nEsc: cancel · Ctrl+C: discard"
+		text := m.tr("Shellux · Settings\n\nResize the window to at least 64 × 18.\nYour changes are preserved.\nEsc: cancel · Ctrl+C: discard")
 		if m.modal != nil && m.modal.kind == "confirm" && m.modal.action == "cancel" {
-			a, b := "[Keep editing]", "[Discard]"
+			a, b := m.tr("[Keep editing]"), m.tr("[Discard]")
 			if m.modal.selected == 0 {
 				a = styles.focused.Render(a)
 			} else {
 				b = styles.focused.Render(b)
 			}
-			text = "Unsaved changes\n\n" + a + "\n" + b + "\n←/→: select · Enter: confirm · Esc: back"
+			text = m.tr("Unsaved changes\n\n") + a + "\n" + b + m.tr("\n←/→: select · Enter: confirm · Esc: back")
 		}
 		block = wrapped(text, max(1, min(60, width-2)), min(height, 7))
 	} else {
@@ -85,7 +85,7 @@ func (m *model) mainView(width, height int, styles uiStyles) string {
 		if i == m.section {
 			prefix = "› "
 		}
-		text := line(prefix+name, 18)
+		text := line(prefix+m.tr(name), 18)
 		if i == m.section {
 			if m.focus == 0 {
 				text = focused.Render(text)
@@ -98,12 +98,12 @@ func (m *model) mainView(width, height int, styles uiStyles) string {
 		nav[i] = text
 	}
 	if bodyHeight > 6 {
-		nav[6] = muted.Render(line(fmt.Sprintf("%d / 11 slots", config.MenuSlots(m.draft.Visible)), 18))
+		nav[6] = muted.Render(line(fmt.Sprintf(m.tr("%d / 11 slots"), config.MenuSlots(m.draft.Visible)), 18))
 	}
 	if bodyHeight > 8 {
-		state := "Saved"
+		state := m.tr("Saved")
 		if m.dirty() {
-			state = "Unsaved"
+			state = m.tr("Unsaved")
 		}
 		nav[8] = muted.Render(line(state, 18))
 	}
@@ -115,7 +115,7 @@ func (m *model) mainView(width, height int, styles uiStyles) string {
 		isFocus := m.focus == 1 && i == selected
 		text := ""
 		if r.heading {
-			text = styles.heading(r.label, i*3)
+			text = styles.heading(m.tr(r.label), i*3)
 		} else if r.action == "toggle" {
 			text = m.switchRow(r, i == selected, isFocus, rw, styles)
 		} else {
@@ -123,9 +123,13 @@ func (m *model) mainView(width, height int, styles uiStyles) string {
 			if i == selected {
 				prefix = "› "
 			}
-			text = prefix + r.label
+			text = prefix + m.tr(r.label)
 			if r.value != "" && r.action != "theme" {
-				text += "  · " + r.value
+				value := r.value
+				if r.action == "language" {
+					value = m.tr(value)
+				}
+				text += "  · " + value
 			}
 			if r.color != "" && r.color != "default" {
 				text += " " + lipgloss.NewStyle().Foreground(lipgloss.Color(r.color)).Render("██")
@@ -142,45 +146,45 @@ func (m *model) mainView(width, height int, styles uiStyles) string {
 	for i := range body {
 		body[i] = nav[i] + muted.Render(" │ ") + content[i]
 	}
-	title := "SHELLUX  ·  Settings"
+	title := m.tr("SHELLUX  ·  Settings")
 	if bodyHeight <= 6 {
-		title += fmt.Sprintf("  ·  %d/11 slots", config.MenuSlots(m.draft.Visible))
+		title += fmt.Sprintf(m.tr("  ·  %d/11 slots"), config.MenuSlots(m.draft.Visible))
 	}
 	if start > 0 || end < len(rows) {
 		title += fmt.Sprintf("  ·  %d–%d / %d", start+1, end, len(rows))
 	}
 	selectedRow := rows[selected]
-	description := selectedRow.description
+	description := m.tr(selectedRow.description)
 	if m.section == 0 && m.focus == 1 && len(selectedRow.entry.Parts) > 0 {
-		label := "Enabled"
+		label := m.tr("Enabled")
 		if m.part > 0 {
-			label = config.PartLabel(selectedRow.entry.Key, selectedRow.entry.Parts[m.part-1])
+			label = m.tr(config.PartLabel(selectedRow.entry.Key, selectedRow.entry.Parts[m.part-1]))
 		}
-		description = "Selected: " + label + ". " + description
+		description = m.tr("Selected: ") + label + ". " + description
 	}
-	status := "Changes are applied only when you save."
+	status := m.tr("Changes are applied only when you save.")
 	if m.notice != "" {
-		description = m.notice
-		status = "Notice"
+		description = m.tr(m.notice)
+		status = m.tr("Notice")
 	}
-	save, cancel := normal.Render("[ Save ]"), normal.Render("[ Cancel ]")
+	save, cancel := normal.Render(m.tr("[ Save ]")), normal.Render(m.tr("[ Cancel ]"))
 	if m.focus == 2 {
-		save = focused.Render("[ Save ]")
+		save = focused.Render(m.tr("[ Save ]"))
 	}
 	if m.focus == 3 {
-		cancel = focused.Render("[ Cancel ]")
+		cancel = focused.Render(m.tr("[ Cancel ]"))
 	}
-	help := "Tab / Shift+Tab: focus · ↑/↓: select · Enter: open"
+	help := m.tr("Tab / Shift+Tab: focus · ↑/↓: select · Enter: open")
 	if m.focus == 1 && m.section == 0 {
-		help = "←/→: switch · Space: toggle · Tab: focus"
+		help = m.tr("←/→: switch · Space: toggle · Tab: focus")
 	}
 	if m.focus == 1 && m.section == 1 {
-		help = "↑/↓: theme · Enter: apply · Delete: remove custom theme"
+		help = m.tr("↑/↓: theme · Enter: apply · Delete: remove custom theme")
 	}
 	return strings.Join([]string{
 		line(styles.heading(title, 0), width), line("", width), strings.Join(body, "\n"), line("", width),
 		muted.Render(wrapped(description, width, 2)), line(accent.Render(status), width), line(save+"  "+cancel, width),
-		muted.Render(line(help, width)), muted.Render(line("Ctrl+S: save · Esc: cancel · Ctrl+C: discard", width)),
+		muted.Render(line(help, width)), muted.Render(line(m.tr("Ctrl+S: save · Esc: cancel · Ctrl+C: discard"), width)),
 	}, "\n")
 }
 
@@ -190,20 +194,20 @@ func (m *model) switchRow(r row, selectedRow, focus bool, width int, styles uiSt
 	if selectedRow {
 		prefix = "› "
 	}
-	text := styles.secondary.Render(prefix + fmt.Sprintf("%-8s", r.label))
-	labels := []string{"Enabled"}
+	text := styles.secondary.Render(prefix + fmt.Sprintf("%-8s", m.tr(r.label)))
+	labels := []string{m.tr("Enabled")}
 	keys := []string{r.entry.Key}
 	for _, p := range r.entry.Parts {
 		keys = append(keys, r.entry.Key+"."+p)
-		labels = append(labels, config.PartLabel(r.entry.Key, p))
+		labels = append(labels, m.tr(config.PartLabel(r.entry.Key, p)))
 	}
 	length := lipgloss.Width(text)
 	for _, label := range labels {
-		length += len(label) + 5
+		length += lipgloss.Width(label) + 5
 	}
 	if length > width {
-		labels[0] = "On"
-		compact := map[string]string{"bar": "B", "percent": "%", "value": "V", "top": "Top", "pressure": "P", "remaining": "Time", "interface": "If", "ip": "IP", "connection": "Conn", "name": "Name", "timezone": "TZ", "utc": "UTC", "upload": "Up", "download": "Down", "latency": "Ping"}
+		labels[0] = m.tr("On")
+		compact := map[string]string{"bar": "B", "percent": "%", "value": "V", "top": "Top", "pressure": "P", "remaining": "Time", "interface": "If", "ip": "IP", "connection": "Conn", "name": m.tr("Name"), "timezone": "TZ", "utc": "UTC", "upload": "Up", "download": "Down", "latency": "Ping"}
 		for i, part := range r.entry.Parts {
 			labels[i+1] = compact[part]
 		}
@@ -216,13 +220,13 @@ func (m *model) switchRow(r row, selectedRow, focus bool, width int, styles uiSt
 	}
 	start, end := selected, selected+1
 	available := width - lipgloss.Width(text) - 2
-	used := len(labels[selected]) + 5
-	for start > 0 && used+len(labels[start-1])+5 <= available {
+	used := lipgloss.Width(labels[selected]) + 5
+	for start > 0 && used+lipgloss.Width(labels[start-1])+5 <= available {
 		start--
-		used += len(labels[start]) + 5
+		used += lipgloss.Width(labels[start]) + 5
 	}
-	for end < len(keys) && used+len(labels[end])+5 <= available {
-		used += len(labels[end]) + 5
+	for end < len(keys) && used+lipgloss.Width(labels[end])+5 <= available {
+		used += lipgloss.Width(labels[end]) + 5
 		end++
 	}
 	if start > 0 {
@@ -253,21 +257,21 @@ func (m *model) switchRow(r row, selectedRow, focus bool, width int, styles uiSt
 func (m *model) dialogView(width, height int, styles uiStyles) string {
 	accent, muted, focused := styles.accent, styles.muted, styles.focused
 	d := m.modal
-	lines := []string{line(styles.heading(d.title, 0), width), line("", width)}
+	lines := []string{line(styles.heading(m.tr(d.title), 0), width), line("", width)}
 	available := height - 7
 	switch d.kind {
 	case "input":
 		lines = append(lines, line(d.input.View(), width))
-		description := "Enter: apply · Esc: back"
+		description := m.tr("Enter: apply · Esc: back")
 		if d.field == "theme" {
-			description = "Name: a–z, 0–9 and hyphens (1–32 characters)."
+			description = m.tr("Name: a–z, 0–9 and hyphens (1–32 characters).")
 		}
 		lines = append(lines, muted.Render(line(description, width)))
 	case "confirm":
-		no, yes := "Keep editing", "Discard"
+		no, yes := m.tr("Keep editing"), m.tr("Discard")
 		if d.action != "cancel" {
-			no = "Back"
-			yes = "Confirm"
+			no = m.tr("Back")
+			yes = m.tr("Confirm")
 		}
 		a, b := "[ "+no+" ]", "[ "+yes+" ]"
 		if d.selected == 0 {
@@ -277,13 +281,13 @@ func (m *model) dialogView(width, height int, styles uiStyles) string {
 		}
 		lines = append(lines, line(a+"  "+b, width))
 		if d.action != "cancel" {
-			lines = append(lines, muted.Render(line("This change is applied permanently only when you save.", width)))
+			lines = append(lines, muted.Render(line(m.tr("This change is applied permanently only when you save."), width)))
 		}
 	case "select":
 		start, end := window(len(d.choices), d.selected, available)
 		for i := start; i < end; i++ {
 			option := d.choices[i]
-			text := "  " + option.label
+			text := "  " + m.tr(option.label)
 			if option.color != "" && option.color != "default" {
 				text += " " + lipgloss.NewStyle().Foreground(lipgloss.Color(option.color)).Render("██")
 			}
@@ -294,20 +298,20 @@ func (m *model) dialogView(width, height int, styles uiStyles) string {
 			lines = append(lines, line(text, width))
 		}
 		if start > 0 || end < len(d.choices) {
-			lines = append(lines, muted.Render(line(fmt.Sprintf("%d–%d / %d · ↑/↓ to scroll", start+1, end, len(d.choices)), width)))
+			lines = append(lines, muted.Render(line(fmt.Sprintf(m.tr("%d–%d / %d · ↑/↓ to scroll"), start+1, end, len(d.choices)), width)))
 		}
 	}
 	for len(lines) < height-4 {
 		lines = append(lines, line("", width))
 	}
-	lines = append(lines, accent.Render(wrapped(d.error, width, 2)))
-	help := "Enter: apply · Esc: back · Ctrl+C: discard"
+	lines = append(lines, accent.Render(wrapped(m.tr(d.error), width, 2)))
+	help := m.tr("Enter: apply · Esc: back · Ctrl+C: discard")
 	if d.kind == "select" {
-		help = "↑/↓: select · Enter: apply · Esc: back"
+		help = m.tr("↑/↓: select · Enter: apply · Esc: back")
 	}
 	if d.kind == "confirm" {
-		help = "←/→ or Tab: select · Enter: confirm · Esc: back"
+		help = m.tr("←/→ or Tab: select · Enter: confirm · Esc: back")
 	}
-	lines = append(lines, muted.Render(line(help, width)), muted.Render(line("The file stays unchanged until you save.", width)))
+	lines = append(lines, muted.Render(line(help, width)), muted.Render(line(m.tr("The file stays unchanged until you save."), width)))
 	return strings.Join(lines, "\n")
 }
