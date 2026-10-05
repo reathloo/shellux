@@ -15,25 +15,26 @@ System stats, music, and your own look right in the terminal, with your familiar
 
 ## Installation
 
-Download the archive for your platform from [GitHub Releases](https://github.com/reathloo/shellux/releases),
-extract it, and run this command inside the extracted folder:
+Install the latest release with one command:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/reathloo/shellux/main/scripts/install-release.sh | sh
+```
+
+The installer detects macOS/Linux and your processor architecture, verifies the
+downloaded archive with SHA-256, installs Shellux under `~/.local`, and adds it
+to Zsh or Bash. Open a new terminal tab afterward.
+
+For a manual installation, download the archive and `checksums.txt` from
+[GitHub Releases](https://github.com/reathloo/shellux/releases), verify the
+archive, extract it, and run:
 
 ```sh
 ./install.sh
 ```
 
-The installer copies the files and prints the two lines to add to your shell configuration.
-For Zsh, the default setup is:
-
-```sh
-export PATH="$HOME/.local/bin:$PATH"
-source "$HOME/.local/share/shellux/shell/shellux.zsh"
-```
-
-Add these lines to `~/.zshrc`. For **Bash**, source `shellux.bash` in `~/.bashrc`
-instead. Then open a new terminal tab.
-Use the release's `checksums.txt` to verify your download with
-`shasum -a 256` or `sha256sum`.
+This manual path prints the lines to add to your shell configuration without
+changing it automatically.
 
 ## Customize
 
@@ -90,6 +91,7 @@ go test -race ./...
 go vet ./...
 sh shell/shellux_test.sh
 sh scripts/install_test.sh
+sh -n scripts/install.sh scripts/install-release.sh
 ```
 
 [CI](.github/workflows/ci.yml) also tests shell integration and the interactive settings menu on macOS and Linux.
