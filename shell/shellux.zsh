@@ -1,8 +1,8 @@
 # Shellux integration for Zsh.
 # Source this file from .zshrc after installing the shellux binary.
 
-if (( $+functions[shellux_prompt] == 0 || ${shellux_integration_version:-0} < 19 )); then
-  typeset -g shellux_integration_version=19
+if (( $+functions[shellux_prompt] == 0 || ${shellux_integration_version:-0} < 20 )); then
+  typeset -g shellux_integration_version=20
   typeset -g shellux_enabled="${shellux_enabled:-1}"
   typeset -g shellux_render_header="${shellux_render_header:-1}"
   typeset -g shellux_clear_startup_scrollback="${shellux_clear_startup_scrollback:-1}"

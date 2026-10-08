@@ -15,6 +15,19 @@
       }
     },
     {
+      "name": "bluerunner",
+      "version": "1.0.0",
+      "size": 13592,
+      "sha256": "6fa203333e43f18efce622c5509ef90dfdd5ce2ac34026d635c36971cd63b918",
+      "package": "packages/bluerunner-1.0.0.shellux-theme",
+      "background": "#080b1a",
+      "style": {
+        "secondary": "#4f4fff",
+        "accent": "#ff9c5e",
+        "muted": "#575794"
+      }
+    },
+    {
       "name": "heart",
       "version": "1.0.0",
       "size": 1370,
@@ -103,6 +116,19 @@
         "secondary": "#af87ff",
         "accent": "#d787ff",
         "muted": "#5f5f87"
+      }
+    },
+    {
+      "name": "sleepyguy",
+      "version": "1.0.0",
+      "size": 6993,
+      "sha256": "04089093b7e19beaef9573db43586d4f0b7b865aee4f096a9b015f35b5834c47",
+      "package": "packages/sleepyguy-1.0.0.shellux-theme",
+      "background": "#120f12",
+      "style": {
+        "secondary": "#d0a3a3",
+        "accent": "#fff7ea",
+        "muted": "#725656"
       }
     },
     {

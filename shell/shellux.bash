@@ -4,8 +4,8 @@
 # Define the alias before DEBUG is installed, so startup does not pause itself.
 alias shx='shellux reload'
 
-if ! declare -F shellux_prompt >/dev/null 2>&1 || (( ${shellux_integration_version:-0} < 19 )); then
-  shellux_integration_version=19
+if ! declare -F shellux_prompt >/dev/null 2>&1 || (( ${shellux_integration_version:-0} < 20 )); then
+  shellux_integration_version=20
   : "${shellux_enabled:=1}"
   : "${shellux_render_header:=1}"
   : "${shellux_clear_startup_scrollback:=1}"
@@ -202,8 +202,9 @@ if ! declare -F shellux_prompt >/dev/null 2>&1 || (( ${shellux_integration_versi
     }
   fi
   shellux_before_command() {
+    local pending_command="${1:-${BASH_COMMAND:-}}"
     # Bash runs DEBUG before PROMPT_COMMAND as well as user commands.
-    [[ "${BASH_COMMAND:-}" == shellux_prompt ]] && return 0
+    [[ "$pending_command" == shellux_prompt ]] && return 0
     [[ -t 1 ]] || return 0
     (( shellux_enabled )) || return 0
     (( shellux_command_paused )) && return 0
@@ -222,6 +223,34 @@ if ! declare -F shellux_prompt >/dev/null 2>&1 || (( ${shellux_integration_versi
     shellux_preserve_content=0
     shellux_command_paused=1
   }
+  shellux_debug_dispatch() {
+    local previous_result=0 previous_last_arg="${1:-}" pending_command="${2:-}"
+    if [[ -n "${shellux_previous_debug_trap:-}" ]]; then
+      eval -- "$shellux_previous_debug_trap" || previous_result=$?
+    fi
+    # Shellux is visual-only: let the existing hook run first, then yield the
+    # viewport before the user's command starts.
+    shellux_before_command "$pending_command" || true
+    : "$previous_last_arg"
+    return "$previous_result"
+  }
+  shellux_prepare_debug_hook() {
+    local existing_trap="${1:-}" registered=0 hook
+    shellux_debug_trap_command=
+    if [[ -n "${bash_preexec_imported:-}" ]]; then
+      for hook in "${preexec_functions[@]}"; do
+        [[ "$hook" == shellux_before_command ]] && registered=1
+      done
+      (( registered )) || preexec_functions+=(shellux_before_command)
+    elif [[ "$existing_trap" == *shellux_debug_dispatch* ]] ||
+         [[ "${STARSHIP_DEBUG_TRAP:-}" == *shellux_debug_dispatch* ]]; then
+      : # A later integration already preserved the Shellux hook.
+    else
+      shellux_previous_debug_trap="$existing_trap"
+      shellux_debug_trap_command='trap '\''shellux_debug_dispatch "$_" "$BASH_COMMAND"'\'' DEBUG'
+    fi
+    shellux_debug_ready=1
+  }
   shellux_handle_resize() {
     [[ -t 1 ]] || return 0
     (( shellux_enabled )) || return 0
@@ -239,11 +268,26 @@ if ! declare -F shellux_prompt >/dev/null 2>&1 || (( ${shellux_integration_versi
   if [[ -z "$(trap -p WINCH)" ]]; then
     trap 'shellux_handle_resize' WINCH
   fi
-  case ";${PROMPT_COMMAND[*]}" in
-    *";shellux_prompt"*) ;;
-    *) PROMPT_COMMAND="shellux_prompt${PROMPT_COMMAND:+;$PROMPT_COMMAND}" ;;
-  esac
-  if [[ -z "$(trap -p DEBUG)" ]]; then
-    trap 'shellux_before_command' DEBUG
+  # DEBUG traps are scoped while a file is sourced. The first prompt performs
+  # the final installation at the interactive shell level, independent of
+  # whether Shellux or another prompt tool was loaded first.
+  shellux_debug_ready=0
+  shellux_previous_debug_trap=
+  shellux_debug_trap_command='trap '\''shellux_debug_dispatch "$_" "$BASH_COMMAND"'\'' DEBUG'
+  shellux_prompt_hook='if (( ! shellux_debug_ready )); then shellux_debug_trap_parts=(); eval "shellux_debug_trap_parts=($(trap -p DEBUG))"; shellux_prepare_debug_hook "${shellux_debug_trap_parts[2]:-}"; eval "$shellux_debug_trap_command"; fi; shellux_prompt'
+  if [[ "$(declare -p PROMPT_COMMAND 2>/dev/null)" == "declare -a "* ]]; then
+    shellux_prompt_registered=0
+    for shellux_prompt_entry in "${PROMPT_COMMAND[@]}"; do
+      [[ "$shellux_prompt_entry" == *shellux_prompt* ]] && shellux_prompt_registered=1
+    done
+    if (( ! shellux_prompt_registered )); then
+      PROMPT_COMMAND=("$shellux_prompt_hook" "${PROMPT_COMMAND[@]}")
+    fi
+    unset shellux_prompt_registered shellux_prompt_entry
+  else
+    case ";${PROMPT_COMMAND:-}" in
+      *";shellux_prompt"*) ;;
+      *) PROMPT_COMMAND="$shellux_prompt_hook${PROMPT_COMMAND:+;$PROMPT_COMMAND}" ;;
+    esac
   fi
 fi

@@ -22,11 +22,41 @@ equal "$shellux_render_header" 0 'clear keeps the header paused'
 
 if [[ "$1" == bash ]]; then
   shopt -s expand_aliases
-  trap 'shellux_before_command' DEBUG
-  shellux_integration_version=16
+  foreign_debug_hits=0
+  foreign_debug_hook() { foreign_debug_hits=$((foreign_debug_hits + 1)); }
+  foreign_prompt_one() { :; }
+  foreign_prompt_two() { :; }
+  trap 'foreign_debug_hook' DEBUG
+  PROMPT_COMMAND=(foreign_prompt_one foreign_prompt_two)
+  shellux_integration_version=19
   source "shell/shellux.bash"
-  equal "$shellux_integration_version" 19 'existing Bash integration upgrades'
-  equal "$(trap -p DEBUG)" "trap -- 'shellux_before_command' DEBUG" 'existing Bash DEBUG hook stays installed'
+  equal "$shellux_integration_version" 20 'existing Bash integration upgrades'
+  eval "${PROMPT_COMMAND[0]}"
+  equal "$shellux_previous_debug_trap" foreign_debug_hook 'existing Bash DEBUG hook is preserved'
+  case "$(trap -p DEBUG)" in
+    *shellux_debug_dispatch*) ;;
+    *) fail 'Bash DEBUG hooks were not chained' ;;
+  esac
+  case "${PROMPT_COMMAND[0]}" in
+    *shellux_prompt*) ;;
+    *) fail 'Shellux keeps first prompt hook position' ;;
+  esac
+  equal "${PROMPT_COMMAND[1]}" foreign_prompt_one 'first existing prompt hook is preserved'
+  equal "${PROMPT_COMMAND[2]}" foreign_prompt_two 'second existing prompt hook is preserved'
+  debug_hits_before=$foreign_debug_hits
+  :
+  (( foreign_debug_hits > debug_hits_before )) || fail 'existing Bash DEBUG hook no longer runs'
+fi
+if [[ "$1" == zsh ]]; then
+  foreign_preexec_hook() { :; }
+  foreign_precmd_hook() { :; }
+  add-zsh-hook preexec foreign_preexec_hook
+  add-zsh-hook precmd foreign_precmd_hook
+  shellux_integration_version=19
+  source "shell/shellux.zsh"
+  equal "$shellux_integration_version" 20 'existing Zsh integration upgrades'
+  [[ " ${preexec_functions[*]} " == *' foreign_preexec_hook '* ]] || fail 'existing Zsh preexec hook was removed'
+  [[ " ${precmd_functions[*]} " == *' foreign_precmd_hook '* ]] || fail 'existing Zsh precmd hook was removed'
 fi
 
 # Use a counter instead of launching a renderer; termination is tested below.
@@ -61,6 +91,7 @@ equal "$watch_starts" 1 'on is idempotent'
 for subcommand in theme style animation; do
   shellux "$subcommand" purplemonster >/dev/null
 done
+
 equal "$watch_starts" 4 'appearance commands reload exactly once'
 shellux >/dev/null
 equal "$watch_starts" 5 'bare shellux reloads exactly once'
@@ -194,3 +225,44 @@ shellux exit
 fail 'shellux exit did not exit'
 TESTS
 done
+
+# Loading Starship after Shellux still leaves its DEBUG hook in place until the
+# first prompt. Shellux then preserves it and yields to it before pausing.
+SHELLUX_BIN=true bash --noprofile --norc <<'TESTS'
+source shell/shellux.bash
+STARSHIP_DEBUG_TRAP=
+starship_preexec_all() { eval -- "$STARSHIP_DEBUG_TRAP"; }
+trap 'starship_preexec_all' DEBUG
+STARSHIP_SHELL=bash
+eval "$PROMPT_COMMAND"
+case "$(trap -p DEBUG)" in
+  *shellux_debug_dispatch*) ;;
+  *) printf 'FAIL: Shellux hook was not installed after Starship\n' >&2; exit 1 ;;
+esac
+[[ "$shellux_previous_debug_trap" == starship_preexec_all ]] || {
+  printf 'FAIL: Shellux did not retain the Starship hook\n' >&2
+  exit 1
+}
+TESTS
+
+# bash-preexec exposes cooperative arrays specifically for integrations. Use
+# them when present instead of competing for its DEBUG trap.
+SHELLUX_BIN=true bash --noprofile --norc <<'TESTS'
+bash_preexec_imported=1
+preexec_functions=(foreign_preexec)
+precmd_functions=(foreign_precmd)
+trap 'true' DEBUG
+PROMPT_COMMAND=(foreign_precmd)
+source shell/shellux.bash
+eval "${PROMPT_COMMAND[0]}"
+[[ " ${preexec_functions[*]} " == *' shellux_before_command '* ]] || {
+  printf 'FAIL: bash-preexec did not receive the Shellux hook\n' >&2
+  exit 1
+}
+[[ "$(trap -p DEBUG)" == "trap -- 'true' DEBUG" ]] || {
+  printf 'FAIL: bash-preexec DEBUG trap was replaced\n' >&2
+  exit 1
+}
+TESTS
+
+printf 'compatibility hook tests passed\n'

@@ -66,7 +66,7 @@ case $(uname -m) in
   *) exit 1 ;;
 esac
 
-archive_name="shellux_0.1.2_${release_os}_${release_arch}.tar.gz"
+archive_name="shellux_0.1.3_${release_os}_${release_arch}.tar.gz"
 tar -czf "$release_dir/$archive_name" -C "$fixture/archive" .
 if command -v sha256sum >/dev/null 2>&1; then
   archive_checksum=$(sha256sum "$release_dir/$archive_name" | awk '{ print $1 }')

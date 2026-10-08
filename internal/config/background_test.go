@@ -7,7 +7,7 @@ import (
 
 func TestBackgroundColor(t *testing.T) {
 	for _, test := range []struct{ input, want string }{
-		{"dark", "#11111b"}, {"NAVY", "#000080"}, {" #A0B1C2 ", "#a0b1c2"}, {"default", "default"}, {"purplemonster", "#140d20"}, {"orangedragon", "#1e1210"}, {"orb", "#0b1420"}, {"liqudemetall", "#11131c"}, {"anime-face", "#100317"}, {"loopingliqude", "#17191f"}, {"heart", "#1b0d15"}, {"pinkcat", "#24121d"}, {"spiderboy", "#0c1018"}, {"shelluxdefault", "#000000"}, {"slotmaschine", "#100d12"},
+		{"dark", "#11111b"}, {"NAVY", "#000080"}, {" #A0B1C2 ", "#a0b1c2"}, {"default", "default"}, {"bluerunner", "#080b1a"}, {"purplemonster", "#140d20"}, {"orangedragon", "#1e1210"}, {"orb", "#0b1420"}, {"liqudemetall", "#11131c"}, {"anime-face", "#100317"}, {"loopingliqude", "#17191f"}, {"heart", "#1b0d15"}, {"pinkcat", "#24121d"}, {"sleepyguy", "#120f12"}, {"spiderboy", "#0c1018"}, {"shelluxdefault", "#000000"}, {"slotmaschine", "#100d12"},
 	} {
 		got, err := BackgroundColor(test.input)
 		if err != nil || got != test.want {
