@@ -290,31 +290,7 @@ func (m *model) rows() []row {
 				group = e.Group
 				rows = append(rows, row{label: group, heading: true})
 			}
-			description := "Show or hide an item; its component choices are preserved."
-			switch e.Key {
-			case "temperature":
-				description = "Battery and thermal share one slot."
-			case "battery":
-				description = "Shares a slot with thermal. Remaining: estimated battery runtime; N/A while charging."
-			case "spotify", "progress":
-				description = "Spotify and progress share one slot."
-			case "time":
-				description = "The clock in the header does not use a menu slot."
-			case "date":
-				description = "Date, timezone name and UTC offset are independent. The offset follows daylight saving time."
-			case "cpu":
-				description = "CPU: load per core. Top: separate ps CPU average, shown below CPU; refreshed every 5s."
-			case "ram":
-				description = "Pressure: macOS memory pressure level or Linux 10s PSI; N/A if unavailable."
-			case "network-status":
-				description = "Connection type and network name are independent; name may be unavailable."
-			case "network-traffic":
-				description = "Upload, download and latency share one slot. Gateway ping every 5s; N/A without a response."
-			}
-			if config.Shown(m.draft.Visible, e.Key) && !config.EntryShown(m.draft.Visible, e.Key) {
-				description = "No components enabled – hidden in the header"
-			}
-			rows = append(rows, row{label: e.Name, action: "toggle", entry: e, description: description})
+			rows = append(rows, row{label: e.Name, action: "toggle", entry: e})
 		}
 		return append(rows, row{label: "Reset menu items", action: "reset", description: "Reset items and components only; appearance stays unchanged."})
 	case 1:
@@ -326,7 +302,7 @@ func (m *model) rows() []row {
 			}
 			mark := "[ ]"
 			if m.draft.Animation == t.Animation && config.DisplayStyle(m.draft.Style) == t.Style && m.draft.Background == t.Background {
-				mark = "[x]"
+				mark = "[✓]"
 			}
 			kind := m.tr("built-in")
 			if e, ok := themepack.Lookup(t.Name); ok {

@@ -130,13 +130,13 @@ func DisplayParts(name string) []string {
 	case "date":
 		return []string{"value", "timezone", "utc"}
 	case "cpu":
-		return []string{"bar", "percent", "value", "top"}
+		return []string{"bar", "percent", "value", "top", "sparkline"}
 	case "ram":
-		return []string{"bar", "percent", "value", "pressure"}
+		return []string{"bar", "percent", "value", "pressure", "sparkline"}
 	case "battery":
-		return []string{"bar", "percent", "value", "remaining"}
+		return []string{"bar", "percent", "value", "remaining", "sparkline"}
 	case "network-traffic":
-		return []string{"upload", "download", "latency"}
+		return []string{"upload", "download", "latency", "sparkline"}
 	case "network-status":
 		return []string{"value", "interface", "ip", "connection", "name"}
 	}
@@ -178,7 +178,7 @@ func PartLabel(name, part string) string {
 		return "Status"
 	}
 	labels := map[string]string{
-		"bar": "Bar", "percent": "Percent", "value": "Value", "top": "Top process",
+		"bar": "Bar", "sparkline": "History", "percent": "Percent", "value": "Value", "top": "Top process",
 		"pressure": "Pressure", "remaining": "Remaining", "interface": "Interface",
 		"ip": "IP", "connection": "Connection", "name": "Network name",
 		"timezone": "Timezone", "utc": "UTC offset",
@@ -200,7 +200,7 @@ func Shown(visible map[string]bool, name string) bool {
 		}
 	}
 	switch name {
-	case "cpu.top", "ram.pressure", "battery.bar", "battery.remaining", "network-status.connection", "network-status.name", "date.timezone", "date.utc", "network-traffic.latency":
+	case "cpu.sparkline", "cpu.top", "ram.sparkline", "ram.pressure", "battery.bar", "battery.sparkline", "battery.remaining", "network-status.connection", "network-status.name", "date.timezone", "date.utc", "network-traffic.sparkline", "network-traffic.latency":
 		return false // New optional details preserve the existing header.
 	}
 	return true // Original component switches default to on.

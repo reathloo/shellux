@@ -109,7 +109,7 @@ func TestNetworkValues(t *testing.T) {
 	if got, want := networkStatusValueParts(connected, true, true, true, false, false), "Connected · en0 · 192.168.1.24"; got != want {
 		t.Fatalf("networkStatusValueParts() = %q, want %q", got, want)
 	}
-	if got, want := networkTrafficValue(connected, true, true, false), "UP 2.0 MB/s DOWN 512 KB/s"; got != want {
+	if got, want := networkTrafficValue(connected, nil, false, true, true, false), "UP 2.0 MB/s DOWN 512 KB/s"; got != want {
 		t.Fatalf("networkTrafficValue() = %q, want %q", got, want)
 	}
 	if got, want := networkStatusValueParts(systeminfo.Network{}, true, true, true, false, false), "Disconnected"; got != want {
@@ -146,7 +146,7 @@ func TestTrafficComponentsRenderIndependently(t *testing.T) {
 			wantSlots, wantRows = 0, 1
 		}
 		wantValue := []string{"", "UP 2.0 MB/s", "DOWN 512 KB/s", "UP 2.0 MB/s DOWN 512 KB/s", "4.0 ms", "UP 2.0 MB/s 4.0 ms", "DOWN 512 KB/s 4.0 ms", "UP 2.0 MB/s DOWN 512 KB/s 4.0 ms"}[mask]
-		if got := networkTrafficValue(network, mask&1 != 0, mask&2 != 0, mask&4 != 0); got != wantValue {
+		if got := networkTrafficValue(network, nil, false, mask&1 != 0, mask&2 != 0, mask&4 != 0); got != wantValue {
 			t.Fatalf("mask %d: traffic = %q, want %q", mask, got, wantValue)
 		}
 		if config.MenuSlots(visible) != wantSlots || len(layout.Dashboard) != wantRows {
@@ -176,6 +176,40 @@ func TestTrafficComponentsRenderIndependently(t *testing.T) {
 func TestRateValueUsesBytesBelowOneKilobyte(t *testing.T) {
 	if got, want := rateValue(512), "512 B/s"; got != want {
 		t.Fatalf("rateValue() = %q, want %q", got, want)
+	}
+}
+
+func TestSparklineValueUsesFixedAndRelativeScales(t *testing.T) {
+	if got, want := sparklineValue([]float64{0, 25, 50, 75, 100}, false), "▁▂▄▆█"; got != want {
+		t.Fatalf("fixed sparkline = %q, want %q", got, want)
+	}
+	if got, want := sparklineValue([]float64{0, 10, 20}, true), "▁▄█"; got != want {
+		t.Fatalf("relative sparkline = %q, want %q", got, want)
+	}
+	if got := sparklineValue(nil, false); got != "N/A" {
+		t.Fatalf("empty sparkline = %q, want N/A", got)
+	}
+}
+
+func TestSelectedSparklinesRenderWithMetrics(t *testing.T) {
+	visible := config.Default().Visible
+	for _, key := range []string{"cpu.sparkline", "ram.sparkline", "battery.sparkline", "network-traffic.sparkline"} {
+		visible[key] = true
+	}
+	snapshot := systeminfo.Snapshot{
+		CPU:     systeminfo.CPU{Cores: 4, LoadAverage: 1},
+		Memory:  systeminfo.Memory{Total: 100, Available: 50},
+		Network: systeminfo.Network{Connected: true},
+		Battery: systeminfo.Battery{Available: true, Percentage: 50},
+		Trends: systeminfo.Trends{
+			CPU: []float64{0, 100}, Memory: []float64{25, 75}, Network: []float64{1, 2}, Battery: []float64{100, 50},
+		},
+	}
+	output := stripANSI(strings.Join(NewHeaderLayout(snapshot, "eye", theme.DarkLuxury(), visible).Dashboard, "\n"))
+	for _, want := range []string{"▁█", "▂▆", "▄█ UP", "█▄"} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("dashboard lacks %q: %s", want, output)
+		}
 	}
 }
 
@@ -413,7 +447,7 @@ func TestNewDetailsUnavailableAndCompact(t *testing.T) {
 	if got := batteryValueParts(systeminfo.Battery{Available: true, Percentage: 80}, false, false, false, true); got != "N/A" {
 		t.Fatal(got)
 	}
-	if got := memoryWithPressure(systeminfo.Memory{}, false, false, false, true); got != "N/A" {
+	if got := memoryWithPressure(systeminfo.Memory{}, nil, false, false, false, false, true); got != "N/A" {
 		t.Fatal(got)
 	}
 	if got := topProcessValue(systeminfo.Process{}, dashboardWidth-14); got != "N/A" {

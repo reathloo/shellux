@@ -130,14 +130,15 @@ func NewHeaderLayout(snapshot systeminfo.Snapshot, eye string, colors theme.Them
 	appendSection("SYSTEM", items)
 	items = nil
 	add("network-status", "status", networkStatusValueParts(snapshot.Network, show("network-status.value"), show("network-status.interface"), show("network-status.ip"), show("network-status.connection"), show("network-status.name"), lang))
-	add("network-traffic", "traffic", networkTrafficValue(snapshot.Network, show("network-traffic.upload"), show("network-traffic.download"), show("network-traffic.latency")))
+	add("network-traffic", "traffic", networkTrafficValue(snapshot.Network, snapshot.Trends.Network, show("network-traffic.sparkline"), show("network-traffic.upload"), show("network-traffic.download"), show("network-traffic.latency")))
 	add("ip", "ip", availableText(snapshot.Network.IPAddress))
 	appendSection("NETWORK", items)
 	items = nil
 	if config.EntryShown(visible, "cpu") {
-		metricsShown := show("cpu.bar") || show("cpu.percent") || show("cpu.value")
+		metricsShown := show("cpu.bar") || show("cpu.sparkline") || show("cpu.percent") || show("cpu.value")
 		if metricsShown {
-			add("cpu", "cpu", cpuValueParts(snapshot.CPU, show("cpu.bar"), show("cpu.percent"), show("cpu.value"), lang))
+			value := cpuValueParts(snapshot.CPU, show("cpu.bar"), show("cpu.percent"), show("cpu.value"), lang)
+			add("cpu", "cpu", withSparkline(value, snapshot.Trends.CPU, show("cpu.sparkline"), false))
 		}
 		if show("cpu.top") {
 			if metricsShown {
@@ -148,10 +149,11 @@ func NewHeaderLayout(snapshot systeminfo.Snapshot, eye string, colors theme.Them
 		}
 	}
 	add("cores", "cores", coresValue(snapshot.CPU, show("cores.bar"), show("cores.percent"), show("cores.value"), lang))
-	add("ram", "memory", memoryWithPressure(snapshot.Memory, show("ram.bar"), show("ram.percent"), show("ram.value"), show("ram.pressure")))
+	add("ram", "memory", memoryWithPressure(snapshot.Memory, snapshot.Trends.Memory, show("ram.bar"), show("ram.sparkline"), show("ram.percent"), show("ram.value"), show("ram.pressure")))
 	add("volume", "volume", volumeValueParts(snapshot.Volume, show("volume.bar"), show("volume.percent"), show("volume.value")))
 	if config.EntryShown(visible, "battery") {
 		battery := batteryValueParts(snapshot.Battery, show("battery.bar"), show("battery.percent"), show("battery.value"), show("battery.remaining"), lang)
+		battery = withSparkline(battery, snapshot.Trends.Battery, show("battery.sparkline"), false)
 		if show("temperature") {
 			battery += " · " + temperatureValue(snapshot.Temperature)
 		}
@@ -479,11 +481,12 @@ func topProcessValue(process systeminfo.Process, width int) string {
 	return process.Name + suffix
 }
 
-func memoryWithPressure(memory systeminfo.Memory, bar, percent, value, pressure bool) string {
+func memoryWithPressure(memory systeminfo.Memory, trends []float64, bar, sparkline, percent, value, pressure bool) string {
 	base := ""
 	if bar || percent || value {
 		base = memoryValueParts(memory, bar, percent, value)
 	}
+	base = withSparkline(base, trends, sparkline, false)
 	if pressure {
 		if base != "" {
 			base += " · "
@@ -493,11 +496,14 @@ func memoryWithPressure(memory systeminfo.Memory, bar, percent, value, pressure 
 	return base
 }
 
-func networkTrafficValue(network systeminfo.Network, upload, download, latency bool) string {
+func networkTrafficValue(network systeminfo.Network, trends []float64, sparkline, upload, download, latency bool) string {
 	if !network.Connected {
 		network.UploadRate, network.DownloadRate = 0, 0
 	}
 	var parts []string
+	if sparkline {
+		parts = append(parts, sparklineValue(trends, true))
+	}
 	if upload {
 		parts = append(parts, "UP "+rateValue(network.UploadRate))
 	}
@@ -508,6 +514,41 @@ func networkTrafficValue(network systeminfo.Network, upload, download, latency b
 		parts = append(parts, latencyValue(network.Latency))
 	}
 	return strings.Join(parts, " ")
+}
+
+func withSparkline(value string, trends []float64, enabled, relative bool) string {
+	if !enabled {
+		return value
+	}
+	line := sparklineValue(trends, relative)
+	if value == "" {
+		return line
+	}
+	return line + " " + value
+}
+
+func sparklineValue(values []float64, relative bool) string {
+	if len(values) == 0 {
+		return "N/A"
+	}
+	maximum := 100.0
+	if relative {
+		maximum = 0
+		for _, value := range values {
+			maximum = max(maximum, value)
+		}
+		if maximum == 0 {
+			maximum = 1
+		}
+	}
+	const levels = "▁▂▃▄▅▆▇█"
+	runes := []rune(levels)
+	var line strings.Builder
+	for _, value := range values {
+		index := int(max(0, min(1, value/maximum)) * float64(len(runes)-1))
+		line.WriteRune(runes[index])
+	}
+	return line.String()
 }
 
 func rateValue(bytesPerSecond uint64) string {

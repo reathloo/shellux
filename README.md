@@ -44,6 +44,8 @@ shellux settings
 
 Explore **Menu items**, **Themes**, **Appearance**, and **General** to choose what
 appears, select themes, set custom colors, and change the refresh interval.
+CPU, RAM, network traffic, and battery can each show an optional eight-step
+sparkline summarizing the last minute; the existing detail switches remain independent.
 Under **General → Language**, choose **Automatic (system)**, **English**, or
 **Deutsch** for the dashboard and settings. Automatic uses the system/terminal
 locale, with English as the fallback for other languages. Commands stay unchanged.
@@ -80,7 +82,7 @@ Customization commands remain available as an alternative to the settings menu.
 
 ## Development
 
-Requires **Go 1.27.1 or later**. On macOS, the Xcode Command Line Tools are also required.
+Requires **Go 1.27.2 or later**. On macOS, the Xcode Command Line Tools are also required.
 From the cloned repository:
 
 ```sh

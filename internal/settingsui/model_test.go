@@ -94,8 +94,8 @@ func TestKeyboardNavigationAndDraftSwitches(t *testing.T) {
 	press(m, "space")
 	press(m, "right")
 	press(m, "space")
-	if !strings.Contains(m.selectedRow().description, "No components enabled") {
-		t.Fatal("missing hidden explanation")
+	if config.EntryShown(m.draft.Visible, "cpu") || !strings.Contains(m.menuHelp("cpu", "value"), "one-minute CPU load") {
+		t.Fatal("component help or hidden state is incorrect")
 	}
 	m.part = 0
 	press(m, "space")
@@ -139,7 +139,7 @@ func TestAllNewComponentControlsRemainFocusable(t *testing.T) {
 					t.Fatalf("%s.%s did not toggle", name, part)
 				}
 				view := m.View().Content
-				if !strings.Contains(ansi.Strip(view), "Selected: "+config.PartLabel(name, part)) || !strings.Contains(view, "\x1b[") {
+				if !strings.Contains(ansi.Strip(view), m.componentPreview(name, part)) || m.menuHelp(name, part) == "" || !strings.Contains(view, "\x1b[") {
 					t.Fatalf("focused control hidden: %s.%s at %v", name, part, size)
 				}
 				checkBounds(t, m, size)
@@ -150,6 +150,126 @@ func TestAllNewComponentControlsRemainFocusable(t *testing.T) {
 				t.Fatal("component focus did not wrap")
 			}
 		}
+	}
+}
+
+func TestEveryMenuControlHasSpecificLocalizedHelp(t *testing.T) {
+	m := newModel(config.Default(), func(config.Config) error { return nil })
+	english := map[string]string{}
+	englishByControl := map[string]string{}
+	for _, entry := range config.MenuEntries() {
+		keys := append([]string{""}, entry.Parts...)
+		for _, part := range keys {
+			text := m.menuHelp(entry.Key, part)
+			if text == "" {
+				t.Fatalf("missing English help for %s.%s", entry.Key, part)
+			}
+			if previous := english[text]; previous != "" {
+				t.Fatalf("duplicate English help for %s.%s and %s", entry.Key, part, previous)
+			}
+			control := entry.Key + "." + part
+			english[text] = control
+			englishByControl[control] = text
+		}
+	}
+
+	m.draft.Language = "de"
+	for _, entry := range config.MenuEntries() {
+		for _, part := range append([]string{""}, entry.Parts...) {
+			control := entry.Key + "." + part
+			if text := m.menuHelp(entry.Key, part); text == "" || text == englishByControl[control] {
+				t.Fatalf("missing German help for %s.%s: %q", entry.Key, part, text)
+			}
+		}
+	}
+}
+
+func TestComponentControlsShowOutputPreviews(t *testing.T) {
+	m := newModel(config.Default(), func(config.Config) error { return nil })
+	chooseRow(t, m, "toggle", "cpu")
+	if view := ansi.Strip(m.View().Content); !strings.Contains(view, "[✓]") || !strings.Contains(view, "[ ]") {
+		t.Fatalf("settings view does not distinguish enabled and disabled controls: %s", view)
+	}
+	previews := map[string]string{
+		"bar": "████░░░░", "sparkline": "▂▃▅▇▆▄▂▃", "percent": "42%",
+		"top": "code (24%)", "pressure": "Normal", "remaining": "~3h 20m",
+		"upload": "↑ 1.4 MB/s", "download": "↓ 8.2 MB/s", "latency": "18 ms",
+	}
+	for part, want := range previews {
+		entry := "cpu"
+		if part == "pressure" {
+			entry = "ram"
+		}
+		if part == "remaining" {
+			entry = "battery"
+		}
+		if part == "upload" || part == "download" || part == "latency" {
+			entry = "network-traffic"
+		}
+		if got := m.componentPreview(entry, part); got != want {
+			t.Fatalf("%s preview = %q, want %q", part, got, want)
+		}
+	}
+
+	m.draft.Language = "de"
+	if got := m.componentPreview("network-status", "value"); got != "Verbunden" {
+		t.Fatalf("German status preview = %q", got)
+	}
+	if got := m.componentPreview("date", "value"); got != "15.10.2026" {
+		t.Fatalf("German date preview = %q", got)
+	}
+}
+
+func TestEveryEntryShowsAnOutputPreview(t *testing.T) {
+	m := newModel(config.Default(), func(config.Config) error { return nil })
+	m.Update(tea.WindowSizeMsg{Width: 64, Height: 18})
+	seen := map[string]string{}
+	for _, entry := range config.MenuEntries() {
+		preview := m.entryPreview(entry.Key)
+		if preview == "" || preview == config.DisplayMenuItem(entry.Key) || preview == "Enabled" {
+			t.Fatalf("%s has no concrete preview: %q", entry.Key, preview)
+		}
+		if previous := seen[preview]; previous != "" {
+			t.Fatalf("%s and %s share preview %q", entry.Key, previous, preview)
+		}
+		seen[preview] = entry.Key
+		chooseRow(t, m, "toggle", entry.Key)
+		if view := ansi.Strip(m.View().Content); !strings.Contains(view, preview) {
+			t.Fatalf("%s preview is clipped in a narrow window: %s", entry.Key, view)
+		}
+		for _, part := range entry.Parts {
+			partPreview := m.componentPreview(entry.Key, part)
+			if partPreview == "" || partPreview == config.PartLabel(entry.Key, part) {
+				t.Fatalf("%s.%s has no concrete preview: %q", entry.Key, part, partPreview)
+			}
+		}
+	}
+
+	chooseRow(t, m, "toggle", "uptime")
+	view := ansi.Strip(m.View().Content)
+	if !strings.Contains(view, "[✓] 2h 5m") || strings.Contains(view, "[✓] Enabled") {
+		t.Fatalf("entry preview is not rendered as its switch label: %s", view)
+	}
+}
+
+func TestHelpTextFollowsFocusedControl(t *testing.T) {
+	m := newModel(config.Default(), func(config.Config) error { return nil })
+	m.width, m.height = 160, 30
+	chooseRow(t, m, "toggle", "cpu")
+
+	entryHelp := m.menuHelp("cpu", "")
+	if view := ansi.Strip(m.View().Content); !strings.Contains(view, entryHelp) {
+		t.Fatalf("CPU entry help is not visible: %s", view)
+	}
+	press(m, "right")
+	barHelp := m.menuHelp("cpu", "bar")
+	if view := ansi.Strip(m.View().Content); !strings.Contains(view, barHelp) || strings.Contains(view, entryHelp) {
+		t.Fatalf("help did not follow bar focus: %s", view)
+	}
+	press(m, "right")
+	percentHelp := m.menuHelp("cpu", "percent")
+	if view := ansi.Strip(m.View().Content); !strings.Contains(view, percentHelp) || strings.Contains(view, barHelp) {
+		t.Fatalf("help did not follow percent focus: %s", view)
 	}
 }
 

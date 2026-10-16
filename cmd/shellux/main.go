@@ -133,6 +133,8 @@ func main() {
 		fmt.Fprintf(os.Stderr, "shellux: collect system information: %v\n", err)
 		os.Exit(1)
 	}
+	var trends systeminfo.TrendRecorder
+	snapshot.Trends = trends.Observe(snapshot)
 	layout := render.NewHeaderLayout(snapshot, animation.Frame(selectedAnimation, 0), selectedStyle, settings.Visible, locale.Resolve(settings.Language))
 	if *reserveHeader {
 		if rows, columns, sizeErr := terminal.Size(os.Stdout.Fd()); sizeErr == nil {
@@ -606,6 +608,7 @@ func watchHeader(interval time.Duration, visible map[string]bool, inPlace bool, 
 
 	frame := 0
 	var snapshot systeminfo.Snapshot
+	var trends systeminfo.TrendRecorder
 	var snapshotMu sync.RWMutex
 	columns := 0
 	rows := 0
@@ -649,6 +652,7 @@ func watchHeader(interval time.Duration, visible map[string]bool, inPlace bool, 
 			if err != nil {
 				return err
 			}
+			updated.Trends = trends.Observe(updated)
 			snapshotMu.Lock()
 			snapshot = updated
 			snapshotMu.Unlock()

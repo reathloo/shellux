@@ -20,6 +20,7 @@ type Snapshot struct {
 	Directory   string
 	Now         time.Time
 	Timezone    string
+	Trends      Trends
 }
 
 // SnapshotInfo collects all header data. Optional sensors remain unavailable

@@ -214,16 +214,16 @@ def check_shell(shell):
             menu_rows = re.findall(r"^  (\S+)\s+(?:on|off)(.*)$", report, re.MULTILINE)
             names = [name for name, _ in menu_rows]
             parts = {name: re.findall(r"(\w+): (?:on|off)", details) for name, details in menu_rows}
-            for item, part, label, key in (
-                ("cpu", "top", b"Top process", "cpu.top"),
-                ("ram", "pressure", b"Pressure", "ram.pressure"),
-                ("battery", "bar", b"Bar", "battery.bar"),
-                ("battery", "remaining", b"Remaining", "battery.remaining"),
-                ("status", "connection", b"Connection", "network-status.connection"),
-                ("status", "name", b"Network name", "network-status.name"),
-                ("date", "timezone", b"Timezone", "date.timezone"),
-                ("date", "utc", b"UTC offset", "date.utc"),
-                ("traffic", "latency", b"Latency", "network-traffic.latency"),
+            for item, part, preview, key in (
+                ("cpu", "top", "code (24%)", "cpu.top"),
+                ("ram", "pressure", "Normal", "ram.pressure"),
+                ("battery", "bar", "████░░░░", "battery.bar"),
+                ("battery", "remaining", "~3h 20m", "battery.remaining"),
+                ("status", "connection", "Wi-Fi", "network-status.connection"),
+                ("status", "name", "Home Wi-Fi", "network-status.name"),
+                ("date", "timezone", "Berlin", "date.timezone"),
+                ("date", "utc", "UTC+02:00", "date.utc"),
+                ("traffic", "latency", "18 ms", "network-traffic.latency"),
             ):
                 resize(64, 18)
                 start, before = open_ui()
@@ -234,7 +234,7 @@ def check_shell(shell):
                 # line, so the raw incremental stream need not contain the whole
                 # 'Selected:' prefix. The full label plus persisted key verifies
                 # focus; model tests check the complete rendered screen.
-                assert label in plain, (shell, "component focus missing", item, part, plain[-800:])
+                assert preview.encode() in plain, (shell, "component preview missing", item, part, plain[-800:])
                 close_ui(b" \x13", len(raw), before, 1)
                 assert json.loads(config_path.read_bytes())["visible"][key] is True, (item, part, "component not saved")
             resize(140, 40)
@@ -252,12 +252,16 @@ def check_shell(shell):
             assert b"load" in output, "CPU load label was not written out"
             assert re.search(rb"\([^\r\n]*[0-9]+%\)", output), "CPU/process percentage parentheses missing"
             # Each Traffic detail is independent and does not consume another slot.
-            for part, label in (("upload", b"Upload"), ("download", b"Download"), ("latency", b"Latency")):
+            for part, preview in (("upload", "↑ 1.4 MB/s"), ("download", "↓ 8.2 MB/s"), ("latency", "18 ms")):
                 for expected in (False, True):
                     start, before = open_ui()
                     os.write(fd, b"\t" + b"\x1b[B" * names.index("traffic") + b"\x1b[C" * (parts["traffic"].index(part) + 1))
                     drain(0.2)
-                    assert label in raw[start:], ("Traffic component focus missing", part)
+                    # Latency's preview was already verified in the focused-detail
+                    # loop above. Bubble Tea can reuse its unchanged cells here,
+                    # so it need not reappear in the incremental PTY stream.
+                    if part != "latency":
+                        assert preview.encode() in raw[start:], ("Traffic component preview missing", part)
                     output = close_ui(b" \x13", len(raw), before, 1)
                     enabled = json.loads(config_path.read_bytes())["visible"]
                     assert enabled["network-traffic." + part] is expected

@@ -8,6 +8,7 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/reathloo/shellux/internal/config"
+	"github.com/reathloo/shellux/internal/locale"
 )
 
 var sections = []string{"Menu items", "Themes", "Appearance", "General"}
@@ -155,12 +156,12 @@ func (m *model) mainView(width, height int, styles uiStyles) string {
 	}
 	selectedRow := rows[selected]
 	description := m.tr(selectedRow.description)
-	if m.section == 0 && m.focus == 1 && len(selectedRow.entry.Parts) > 0 {
-		label := m.tr("Enabled")
+	if m.section == 0 && m.focus == 1 && selectedRow.action == "toggle" {
+		part := ""
 		if m.part > 0 {
-			label = m.tr(config.PartLabel(selectedRow.entry.Key, selectedRow.entry.Parts[m.part-1]))
+			part = selectedRow.entry.Parts[m.part-1]
 		}
-		description = m.tr("Selected: ") + label + ". " + description
+		description = m.menuHelp(selectedRow.entry.Key, part)
 	}
 	status := m.tr("Changes are applied only when you save.")
 	if m.notice != "" {
@@ -195,25 +196,14 @@ func (m *model) switchRow(r row, selectedRow, focus bool, width int, styles uiSt
 		prefix = "› "
 	}
 	text := styles.secondary.Render(prefix + fmt.Sprintf("%-8s", m.tr(r.label)))
-	labels := []string{m.tr("Enabled")}
+	labels := []string{m.entryPreview(r.entry.Key)}
 	keys := []string{r.entry.Key}
 	for _, p := range r.entry.Parts {
 		keys = append(keys, r.entry.Key+"."+p)
-		labels = append(labels, m.tr(config.PartLabel(r.entry.Key, p)))
-	}
-	length := lipgloss.Width(text)
-	for _, label := range labels {
-		length += lipgloss.Width(label) + 5
-	}
-	if length > width {
-		labels[0] = m.tr("On")
-		compact := map[string]string{"bar": "B", "percent": "%", "value": "V", "top": "Top", "pressure": "P", "remaining": "Time", "interface": "If", "ip": "IP", "connection": "Conn", "name": m.tr("Name"), "timezone": "TZ", "utc": "UTC", "upload": "Up", "download": "Down", "latency": "Ping"}
-		for i, part := range r.entry.Parts {
-			labels[i+1] = compact[part]
-		}
+		labels = append(labels, m.componentPreview(r.entry.Key, p))
 	}
 	// Scroll controls horizontally in narrow windows, keeping the focused one
-	// completely visible. Its unabbreviated label is always in the help area.
+	// completely visible. Its semantic name remains in the help area.
 	selected := 0
 	if focus {
 		selected = min(m.part, len(keys)-1)
@@ -238,7 +228,7 @@ func (m *model) switchRow(r row, selectedRow, focus bool, width int, styles uiSt
 		key := keys[i]
 		check := "[ ]"
 		if config.Shown(m.draft.Visible, key) {
-			check = "[x]"
+			check = "[✓]"
 		}
 		cell := check + " " + labels[i]
 		if focus && i == m.part {
@@ -252,6 +242,104 @@ func (m *model) switchRow(r row, selectedRow, focus bool, width int, styles uiSt
 		text += "›"
 	}
 	return text
+}
+
+func (m *model) entryPreview(entry string) string {
+	switch entry {
+	case "platform":
+		return "macOS · arm64 · Mac"
+	case "shell":
+		return "zsh · Terminal"
+	case "uptime":
+		return "2h 5m"
+	case "date":
+		return m.componentPreview(entry, "value")
+	case "hostname":
+		return "MacBook"
+	case "network-status":
+		return m.tr("Connected") + " · Wi-Fi"
+	case "network-traffic":
+		return "↑1.4 · ↓8.2 MB/s"
+	case "ip":
+		return "192.168.1.24"
+	case "cpu":
+		return "████░░░░ 42%"
+	case "cores":
+		return "8 " + m.tr("cores") + " · 42%"
+	case "ram":
+		return "██████░░ 6.8 GiB"
+	case "volume":
+		return "██████░░ 179/245G"
+	case "battery":
+		return "42% ⚡"
+	case "temperature":
+		return m.tr("Normal")
+	case "directory":
+		return "~/dev/shellux"
+	case "spotify":
+		return "Artist — Song"
+	case "progress":
+		return "▶ 1:24 ███░░░ 3:42"
+	case "time":
+		return "14:32:08"
+	}
+	return config.DisplayMenuItem(entry)
+}
+
+func (m *model) componentPreview(entry, part string) string {
+	switch part {
+	case "bar":
+		return "████░░░░"
+	case "sparkline":
+		return "▂▃▅▇▆▄▂▃"
+	case "percent":
+		return "42%"
+	case "top":
+		return "code (24%)"
+	case "pressure":
+		return m.tr("Normal")
+	case "remaining":
+		return "~3h 20m"
+	case "interface":
+		return "en0"
+	case "ip":
+		return "192.168.1.24"
+	case "connection":
+		return "Wi-Fi"
+	case "name":
+		return "Home Wi-Fi"
+	case "timezone":
+		return "Berlin"
+	case "utc":
+		return "UTC+02:00"
+	case "upload":
+		return "↑ 1.4 MB/s"
+	case "download":
+		return "↓ 8.2 MB/s"
+	case "latency":
+		return "18 ms"
+	case "value":
+		switch entry {
+		case "cpu":
+			return "1.92 " + m.tr("load")
+		case "ram":
+			return "6.8 GiB"
+		case "volume":
+			return "179 / 245 GB"
+		case "battery":
+			return "⚡"
+		case "cores":
+			return "8 " + m.tr("cores")
+		case "date":
+			if m.language() == locale.German {
+				return "15.10.2026"
+			}
+			return "2026-10-15"
+		case "network-status":
+			return m.tr("Connected")
+		}
+	}
+	return m.tr(config.PartLabel(entry, part))
 }
 
 func (m *model) dialogView(width, height int, styles uiStyles) string {

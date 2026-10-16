@@ -10,7 +10,7 @@ func TestNewComponentsPreserveDefaultsAndPersist(t *testing.T) {
 	if MenuSlots(Default().Visible) != 11 || MenuSlots(nil) != 11 {
 		t.Fatal("legacy/default header slot count changed")
 	}
-	for _, key := range []string{"cpu.top", "ram.pressure", "battery.bar", "battery.remaining", "network-status.connection", "network-status.name", "network-traffic.latency"} {
+	for _, key := range []string{"cpu.sparkline", "cpu.top", "ram.sparkline", "ram.pressure", "battery.bar", "battery.sparkline", "battery.remaining", "network-status.connection", "network-status.name", "network-traffic.sparkline", "network-traffic.latency"} {
 		if Shown(nil, key) || Shown(Default().Visible, key) {
 			t.Fatalf("%s enabled by default", key)
 		}

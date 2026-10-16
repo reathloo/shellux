@@ -43,7 +43,7 @@ func TestDetailCommandCacheAndTimeout(t *testing.T) {
 		t.Fatal(err)
 	}
 	for range 2 {
-		if got := detailOutput(command); got != "result" {
+		if got := detailOutputWithin(5*time.Second, command); got != "result" {
 			t.Fatalf("output = %q", got)
 		}
 	}

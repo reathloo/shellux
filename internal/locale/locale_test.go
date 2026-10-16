@@ -31,7 +31,7 @@ func TestExplicitChoiceAndUnknownContent(t *testing.T) {
 	if Resolve("de") != German {
 		t.Fatal("override ignored")
 	}
-	if German.Text("Connected") != "Verbunden" || German.Text("my-custom-theme") != "my-custom-theme" {
+	if German.Text("Connected") != "Verbunden" || German.Text("History") != "Verlauf" || German.Text("my-custom-theme") != "my-custom-theme" {
 		t.Fatal("incorrect translation boundary")
 	}
 }

@@ -26,13 +26,17 @@ type commandSample struct {
 }
 
 func detailOutput(name string, args ...string) string {
+	return detailOutputWithin(1200*time.Millisecond, name, args...)
+}
+
+func detailOutputWithin(timeout time.Duration, name string, args ...string) string {
 	key := name + "\x00" + strings.Join(args, "\x00")
 	detailCommands.Lock()
 	defer detailCommands.Unlock()
 	if sample, ok := detailCommands.values[key]; ok && time.Since(sample.at) < 5*time.Second {
 		return sample.output
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 1200*time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, name, args...)
 	cmd.Env = append(os.Environ(), "LC_ALL=C")

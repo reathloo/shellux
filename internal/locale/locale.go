@@ -118,7 +118,7 @@ var german = map[string]string{
 	"Connected": "Verbunden", "Disconnected": "Nicht verbunden", "No song playing": "Keine Wiedergabe", "Normal": "Normal", "Warning": "Warnung", "Critical": "Kritisch", "Nominal": "Normal", "Fair": "Erhöht", "Serious": "Hoch", "load": "Last",
 	"Menu items": "Menüpunkte", "Themes": "Themes", "Appearance": "Aussehen", "General": "Allgemein", "Language": "Sprache", "Automatic (system)": "Automatisch (System)", "Select language": "Sprache wählen",
 	"Refresh interval": "Aktualisierung", "Animation": "Animation", "Style": "Stil", "Background": "Hintergrund", "Saved": "Gespeichert", "Unsaved": "Ungespeichert", "Notice": "Hinweis", "Enabled": "Aktiv", "On": "An",
-	"Bar": "Balken", "Percent": "Prozent", "Value": "Wert", "Top process": "Top-Prozess", "Pressure": "Speicherdruck", "Charging": "Laden", "Remaining": "Restzeit", "Connection": "Verbindung", "Name": "Name", "Timezone": "Zeitzone", "Interface": "Interface",
+	"Bar": "Balken", "History": "Verlauf", "Percent": "Prozent", "Value": "Wert", "Top process": "Top-Prozess", "Pressure": "Speicherdruck", "Charging": "Laden", "Remaining": "Restzeit", "Connection": "Verbindung", "Name": "Name", "Timezone": "Zeitzone", "Interface": "Interface",
 	"Reset menu items": "Menüpunkte zurücksetzen", "Random combination": "Zufällige Kombination", "Save current combination as a theme…": "Kombination als Theme speichern…",
 	"Save custom theme": "Eigenes Theme speichern", "Custom RGB color": "Eigene RGB-Farbe", "Custom RGB color…": "Eigene RGB-Farbe…", "Profile color": "Profilfarbe",
 	"Select animation": "Animation wählen", "Select style": "Stil wählen", "Select background": "Hintergrund wählen",
@@ -158,4 +158,11 @@ var german = map[string]string{
 	"File changed externally. Please cancel and reopen settings.":                                  "Datei extern geändert. Bitte abbrechen und Einstellungen erneut öffnen.",
 	"Enter a positive duration, such as 1s or 500ms.":                                              "Positive Zeitdauer eingeben, z. B. 1s oder 500ms.",
 	"Enter an RGB color in #RRGGBB format.":                                                        "RGB-Farbe im Format #RRGGBB eingeben.",
+}
+
+func init() {
+	german["History shows the last minute. CPU: load per core. Top: separate ps CPU average, shown below CPU; refreshed every 5s."] = "Verlauf zeigt die letzte Minute. CPU: Last pro Kern. Top: separater CPU-Mittelwert von ps, unter CPU; alle 5s aktualisiert."
+	german["History shows the last minute. Pressure: macOS memory pressure level or Linux 10s PSI; N/A if unavailable."] = "Verlauf zeigt die letzte Minute. Speicherdruck: macOS-Stufe oder Linux-PSI über 10s; N/A falls nicht verfügbar."
+	german["History shows the last minute. Shares a slot with thermal. Remaining: estimated battery runtime; N/A while charging."] = "Verlauf zeigt die letzte Minute. Teilt einen Platz mit Thermik. Restzeit: geschätzte Akkulaufzeit; N/A beim Laden."
+	german["History shows total traffic over the last minute. Upload, download and latency share one slot."] = "Verlauf zeigt den gesamten Traffic der letzten Minute. Upload, Download und Latenz teilen einen Platz."
 }
