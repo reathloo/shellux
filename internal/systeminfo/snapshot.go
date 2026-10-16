@@ -11,8 +11,14 @@ type Snapshot struct {
 	System      System
 	CPU         CPU
 	Memory      Memory
+	Load        LoadAverages
+	Swap        Swap
+	GPU         GPU
 	Volume      Volume
+	DiskIO      DiskIO
 	Network     Network
+	LoggedUsers LoggedUsers
+	Media       MediaActivity
 	Temperature Temperature
 	Battery     Battery
 	Playback    Playback
@@ -62,6 +68,30 @@ func SnapshotInfoWithDisplay(visible map[string]bool) (Snapshot, error) {
 	if config.EntryShown(visible, "volume") {
 		volume, _ = VolumeInfo()
 	}
+	var diskIO DiskIO
+	var load LoadAverages
+	if config.EntryShown(visible, "load-average") {
+		load = LoadAveragesInfo()
+	}
+	var swap Swap
+	if config.EntryShown(visible, "swap") {
+		swap = SwapInfo()
+	}
+	var gpu GPU
+	if config.EntryShown(visible, "gpu") {
+		gpu = GPUInfo()
+	}
+	if config.EntryShown(visible, "disk-io") {
+		diskIO = DiskIOInfo()
+	}
+	var loggedUsers LoggedUsers
+	if config.EntryShown(visible, "logged-users") {
+		loggedUsers = LoggedUsersInfo()
+	}
+	var media MediaActivity
+	if config.EntryShown(visible, "media-activity") {
+		media = MediaActivityInfo(config.Shown(visible, "media-activity.microphone"), config.Shown(visible, "media-activity.camera"))
+	}
 	if config.EntryShown(visible, "cpu") && config.Shown(visible, "cpu.top") {
 		cpu.TopProcess = topProcess()
 	}
@@ -71,8 +101,16 @@ func SnapshotInfoWithDisplay(visible map[string]bool) (Snapshot, error) {
 	if config.EntryShown(visible, "network-status") && (config.Shown(visible, "network-status.connection") || config.Shown(visible, "network-status.name")) {
 		network.Connection, network.Name = connectionDetails(network.Interface, config.Shown(visible, "network-status.name"))
 	}
-	if network.Connected && config.EntryShown(visible, "network-traffic") && config.Shown(visible, "network-traffic.latency") {
-		network.Latency = gatewayLatency()
+	latencyEnabled := config.EntryShown(visible, "network-traffic") && config.Shown(visible, "network-traffic.latency")
+	lossEnabled := config.EntryShown(visible, "packet-loss")
+	if network.Connected && (latencyEnabled || lossEnabled) {
+		probe := gatewayLatency()
+		if latencyEnabled {
+			network.Latency = probe
+		}
+		if lossEnabled {
+			network.PacketLoss = ObservePacketLoss(probe)
+		}
 	}
 	now := TimeInfo()
 	timezone := ""
@@ -84,8 +122,14 @@ func SnapshotInfoWithDisplay(visible map[string]bool) (Snapshot, error) {
 		System:      SystemInfo(),
 		CPU:         cpu,
 		Memory:      memory,
+		Load:        load,
+		Swap:        swap,
+		GPU:         gpu,
 		Volume:      volume,
+		DiskIO:      diskIO,
 		Network:     network,
+		LoggedUsers: loggedUsers,
+		Media:       media,
 		Temperature: temperature,
 		Battery:     battery,
 		Playback:    playback,

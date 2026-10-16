@@ -13,22 +13,59 @@ var entryHelp = map[string]helpText{
 	"uptime":          {"Shows how long the computer has been running since its last restart.", "Zeigt die Laufzeit des Computers seit dem letzten Neustart."},
 	"date":            {"Shows or hides the date row. Its date, timezone and UTC choices remain saved.", "Blendet die Datumszeile ein oder aus. Datum, Zeitzone und UTC-Auswahl bleiben gespeichert."},
 	"hostname":        {"Shows the computer name as its own row.", "Zeigt den Rechnernamen als eigene Zeile."},
+	"media-activity":  {"Shows microphone and camera activity reported by macOS; unsupported devices show N/A.", "Zeigt von macOS gemeldete Mikrofon- und Kameraaktivität; nicht unterstützte Geräte erscheinen als N/A."},
 	"network-status":  {"Shows or hides the connection-status row. Its selected network details remain saved.", "Blendet die Verbindungszeile ein oder aus. Gewählte Netzwerkdetails bleiben gespeichert."},
 	"network-traffic": {"Shows or hides the traffic row for current transfer rates, latency and history.", "Blendet die Traffic-Zeile für aktuelle Datenraten, Latenz und Verlauf ein oder aus."},
 	"ip":              {"Shows the active local IPv4 address as its own row.", "Zeigt die aktive lokale IPv4-Adresse als eigene Zeile."},
+	"packet-loss":     {"Shows failed ICMP probes to the default gateway over the latest twelve checks; blocked ping can look like loss.", "Zeigt fehlgeschlagene ICMP-Proben zum Standard-Gateway über die letzten zwölf Prüfungen; blockierte Pings können wie Verlust wirken."},
 	"cpu":             {"Shows or hides CPU load and its selected details.", "Blendet die CPU-Auslastung und ihre gewählten Details ein oder aus."},
 	"cores":           {"Shows or hides logical CPU-core information and total utilization.", "Blendet Informationen zu logischen CPU-Kernen und Gesamtauslastung ein oder aus."},
 	"ram":             {"Shows or hides physical-memory usage and its selected details.", "Blendet die Arbeitsspeichernutzung und ihre gewählten Details ein oder aus."},
+	"load-average":    {"Shows system load averages over one, five and fifteen minutes; these are runnable-task counts, not CPU percentages.", "Zeigt Systemlast-Mittelwerte über eine, fünf und fünfzehn Minuten; das sind Anzahlen ausführbarer Aufgaben, keine CPU-Prozentwerte."},
+	"swap":            {"Shows used, total and free swap space independently from physical RAM.", "Zeigt belegten, gesamten und freien Auslagerungsspeicher unabhängig vom Arbeitsspeicher."},
+	"gpu":             {"Shows GPU model and hardware core count when macOS reports them; unsupported systems show N/A.", "Zeigt GPU-Modell und Anzahl der Hardware-Kerne, sofern macOS sie meldet; sonst erscheint N/A."},
 	"volume":          {"Shows or hides usage of the system volume.", "Blendet die Belegung des Systemlaufwerks ein oder aus."},
+	"disk-io":         {"Shows physical block-device read and write throughput since the previous sample.", "Zeigt Lese- und Schreibdurchsatz physischer Blockgeräte seit der letzten Messung."},
 	"battery":         {"Shows or hides battery information. Battery and thermal state share one dashboard row.", "Blendet Batterieinformationen ein oder aus. Batterie und Thermik teilen eine Dashboard-Zeile."},
 	"temperature":     {"Shows the system thermal-pressure state. With battery enabled, both appear on one row.", "Zeigt den thermischen Belastungszustand. Mit aktiver Batterie erscheinen beide in einer Zeile."},
 	"directory":       {"Shows the current working directory, shortened to fit the dashboard.", "Zeigt das aktuelle Arbeitsverzeichnis, passend zur Dashboard-Breite gekürzt."},
 	"spotify":         {"Shows artist and title from the Spotify desktop app, or that nothing is playing.", "Zeigt Interpret und Titel aus der Spotify-Desktop-App oder dass nichts wiedergegeben wird."},
 	"progress":        {"Shows playback state, elapsed time and song progress for Spotify.", "Zeigt Wiedergabestatus, vergangene Zeit und Songfortschritt von Spotify."},
+	"logged-users":    {"Shows distinct users with local login sessions, not all running processes.", "Zeigt unterschiedliche Benutzer mit lokalen Anmeldesitzungen, nicht alle laufenden Prozesse."},
 	"time":            {"Shows the current time in the dashboard title. It does not occupy a menu slot.", "Zeigt die aktuelle Uhrzeit im Dashboard-Titel. Sie belegt keinen Menüplatz."},
 }
 
 var componentHelp = map[string]map[string]helpText{
+	"load-average": {
+		"one":     {"Shows the one-minute runnable-task average.", "Zeigt den Mittelwert ausführbarer Aufgaben über eine Minute."},
+		"five":    {"Shows the five-minute runnable-task average.", "Zeigt den Mittelwert ausführbarer Aufgaben über fünf Minuten."},
+		"fifteen": {"Shows the fifteen-minute runnable-task average.", "Zeigt den Mittelwert ausführbarer Aufgaben über fünfzehn Minuten."},
+	},
+	"swap": {
+		"value":     {"Shows used and total swap capacity in GB.", "Zeigt belegten und gesamten Auslagerungsspeicher in GB."},
+		"percent":   {"Shows the used share of swap space; N/A if no swap is configured.", "Zeigt den belegten Anteil des Auslagerungsspeichers; ohne Swap erscheint N/A."},
+		"remaining": {"Shows free swap capacity in GB.", "Zeigt freien Auslagerungsspeicher in GB."},
+	},
+	"gpu": {
+		"name":  {"Shows the graphics processor model reported by macOS.", "Zeigt das von macOS gemeldete Grafikprozessormodell."},
+		"cores": {"Shows the reported number of GPU cores, or N/A when unavailable.", "Zeigt die gemeldete Anzahl der GPU-Kerne oder N/A, falls unbekannt."},
+	},
+	"media-activity": {
+		"microphone": {"Shows whether a macOS audio-input device reports running in any process; N/A means it cannot be determined.", "Zeigt, ob ein macOS-Audioeingabegerät Nutzung durch einen Prozess meldet; N/A bedeutet nicht bestimmbar."},
+		"camera":     {"Shows whether a macOS camera device reports running in any process; N/A means it cannot be determined.", "Zeigt, ob ein macOS-Kameragerät Nutzung durch einen Prozess meldet; N/A bedeutet nicht bestimmbar."},
+	},
+	"packet-loss": {
+		"percent": {"Shows the failed share of up to twelve gateway pings, sampled about every five seconds.", "Zeigt den Anteil fehlgeschlagener Gateway-Pings aus bis zu zwölf Proben, etwa alle fünf Sekunden gemessen."},
+		"samples": {"Shows failed and total gateway probes so the percentage has visible context.", "Zeigt fehlgeschlagene und gesamte Gateway-Proben als Kontext für den Prozentwert."},
+	},
+	"disk-io": {
+		"read":  {"Shows the host disk-read rate in B/s, KB/s or MB/s; the first sample starts at zero.", "Zeigt die Leserate der Host-Laufwerke in B/s, KB/s oder MB/s; die erste Messung beginnt bei null."},
+		"write": {"Shows the host disk-write rate in B/s, KB/s or MB/s; the first sample starts at zero.", "Zeigt die Schreibrate der Host-Laufwerke in B/s, KB/s oder MB/s; die erste Messung beginnt bei null."},
+	},
+	"logged-users": {
+		"count": {"Shows the number of distinct user names reported by local login sessions.", "Zeigt die Anzahl unterschiedlicher Benutzernamen aus lokalen Anmeldesitzungen."},
+		"names": {"Shows the distinct local login names, shortened when the dashboard is narrow.", "Zeigt die verschiedenen lokalen Anmeldenamen, bei wenig Platz gekürzt."},
+	},
 	"date": {
 		"value":    {"Shows the local calendar date.", "Zeigt das lokale Kalenderdatum."},
 		"timezone": {"Shows the local timezone name, for example CEST or Europe/Berlin.", "Zeigt den Namen der lokalen Zeitzone, zum Beispiel MESZ oder Europe/Berlin."},
@@ -67,9 +104,10 @@ var componentHelp = map[string]map[string]helpText{
 		"sparkline": {"Shows the physical-memory usage trend over the last minute.", "Zeigt den Verlauf der Arbeitsspeichernutzung während der letzten Minute."},
 	},
 	"volume": {
-		"bar":     {"Shows used system-volume capacity as an eight-segment bar.", "Zeigt den belegten Speicher des Systemlaufwerks als Balken mit acht Stufen."},
-		"percent": {"Shows the used share of the system volume as a percentage.", "Zeigt den belegten Anteil des Systemlaufwerks als Prozentwert."},
-		"value":   {"Shows used and total system-volume capacity in GB.", "Zeigt belegten und gesamten Speicher des Systemlaufwerks in GB."},
+		"bar":       {"Shows used system-volume capacity as an eight-segment bar.", "Zeigt den belegten Speicher des Systemlaufwerks als Balken mit acht Stufen."},
+		"percent":   {"Shows the used share of the system volume as a percentage.", "Zeigt den belegten Anteil des Systemlaufwerks als Prozentwert."},
+		"value":     {"Shows used and total system-volume capacity in GB.", "Zeigt belegten und gesamten Speicher des Systemlaufwerks in GB."},
+		"remaining": {"Shows remaining available system-volume capacity in GB.", "Zeigt den verbleibenden verfügbaren Speicher des Systemlaufwerks in GB."},
 	},
 	"battery": {
 		"bar":       {"Shows the current battery charge as an eight-segment bar.", "Zeigt den aktuellen Akkustand als Balken mit acht Stufen."},

@@ -1,8 +1,10 @@
 package systeminfo
 
 import (
+	"errors"
 	"net"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"runtime"
@@ -15,6 +17,7 @@ type Latency struct {
 	Target    string
 	Duration  time.Duration
 	Available bool
+	SampledAt time.Time
 }
 
 func connectionDetails(iface string, wantName bool) (kind, name string) {
@@ -93,8 +96,12 @@ func gatewayLatency() Latency {
 	if runtime.GOOS == "darwin" {
 		args[4] = "1000" // macOS uses milliseconds; Linux uses seconds.
 	}
-	duration, ok := parsePingLatency(detailOutput("ping", args...))
-	return Latency{target, duration, ok}
+	sample := detailSampleWithin(1200*time.Millisecond, "ping", args...)
+	if errors.Is(sample.err, exec.ErrNotFound) {
+		return Latency{Target: target}
+	}
+	duration, ok := parsePingLatency(sample.output)
+	return Latency{Target: target, Duration: duration, Available: ok, SampledAt: sample.at}
 }
 
 func parseLinuxGateway(output string) string {

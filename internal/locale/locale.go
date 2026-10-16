@@ -126,6 +126,10 @@ var german = map[string]string{
 
 	"SYSTEM": "SYSTEM", "NETWORK": "NETZWERK", "RESOURCES": "RESSOURCEN", "SESSION": "SITZUNG", "HEADER": "KOPFZEILE",
 	"platform": "Plattform", "uptime": "Laufzeit", "date": "Datum", "hostname": "Hostname", "traffic": "Traffic", "cores": "Kerne", "memory": "RAM", "ram": "RAM", "volume": "Speicher", "battery": "Batterie", "thermal": "Thermik", "path": "Pfad", "progress": "Fortschr.", "time": "Uhrzeit",
+	"disk I/O": "Disk-I/O", "loss": "Paketverlust", "user": "Benutzer", "users": "Benutzer", "media": "Medienzugriff", "swap": "Swap", "gpu": "GPU", "free": "frei",
+	"1 min": "1 Min.", "5 min": "5 Min.", "15 min": "15 Min.", "Cores": "Kerne",
+	"Free space": "Freier Speicher", "Free swap": "Freier Swap", "GPU model": "GPU-Modell",
+	"Read": "Lesen", "Write": "Schreiben", "Samples": "Proben", "Count": "Anzahl", "Users": "Benutzer", "Microphone": "Mikrofon", "Camera": "Kamera", "Mic": "Mikro", "Active": "Aktiv", "Inactive": "Inaktiv", "lost": "verloren", "none": "keine",
 	"Connected": "Verbunden", "Disconnected": "Nicht verbunden", "No song playing": "Keine Wiedergabe", "Normal": "Normal", "Warning": "Warnung", "Critical": "Kritisch", "Nominal": "Normal", "Fair": "Erhöht", "Serious": "Hoch", "load": "Last",
 	"Menu items": "Menüpunkte", "Menu layouts": "Menüvorlagen", "Themes": "Themes", "Appearance": "Aussehen", "General": "Allgemein", "Language": "Sprache", "Automatic (system)": "Automatisch (System)", "Select language": "Sprache wählen",
 	"Refresh interval": "Aktualisierung", "Animation": "Animation", "Style": "Stil", "Background": "Hintergrund", "Saved": "Gespeichert", "Unsaved": "Ungespeichert", "Notice": "Hinweis", "Enabled": "Aktiviert", "On": "An",

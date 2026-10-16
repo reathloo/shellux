@@ -23,6 +23,7 @@ var detailCommands = struct {
 type commandSample struct {
 	at     time.Time
 	output string
+	err    error
 }
 
 func detailOutput(name string, args ...string) string {
@@ -30,11 +31,15 @@ func detailOutput(name string, args ...string) string {
 }
 
 func detailOutputWithin(timeout time.Duration, name string, args ...string) string {
+	return detailSampleWithin(timeout, name, args...).output
+}
+
+func detailSampleWithin(timeout time.Duration, name string, args ...string) commandSample {
 	key := name + "\x00" + strings.Join(args, "\x00")
 	detailCommands.Lock()
 	defer detailCommands.Unlock()
 	if sample, ok := detailCommands.values[key]; ok && time.Since(sample.at) < 5*time.Second {
-		return sample.output
+		return sample
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
@@ -45,8 +50,9 @@ func detailOutputWithin(timeout time.Duration, name string, args ...string) stri
 	if err != nil {
 		output = nil
 	}
-	detailCommands.values[key] = commandSample{time.Now(), string(output)}
-	return string(output)
+	sample := commandSample{time.Now(), string(output), err}
+	detailCommands.values[key] = sample
+	return sample
 }
 
 type Process struct {

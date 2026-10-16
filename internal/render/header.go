@@ -224,6 +224,57 @@ func dashboardEntry(snapshot systeminfo.Snapshot, settings config.Config, entry 
 		return []dashboardValue{{dashboardLabel(entry), strings.Join(values, separator)}}
 	}
 	switch entry.Key {
+	case "load-average":
+		if !snapshot.Load.Available {
+			return join([]string{"N/A"}, "")
+		}
+		values := make([]string, 0, len(parts))
+		for _, part := range parts {
+			switch part {
+			case "one":
+				values = append(values, fmt.Sprintf("1m %.2f", snapshot.Load.One))
+			case "five":
+				values = append(values, fmt.Sprintf("5m %.2f", snapshot.Load.Five))
+			case "fifteen":
+				values = append(values, fmt.Sprintf("15m %.2f", snapshot.Load.Fifteen))
+			}
+		}
+		return join(values, " · ")
+	case "swap":
+		if !snapshot.Swap.Available {
+			return join([]string{"N/A"}, "")
+		}
+		values := make([]string, 0, len(parts))
+		for _, part := range parts {
+			switch part {
+			case "value":
+				values = append(values, fmt.Sprintf("%.1f / %.1f GB", float64(snapshot.Swap.Used())/1e9, float64(snapshot.Swap.Total)/1e9))
+			case "percent":
+				if snapshot.Swap.Total > 0 {
+					values = append(values, fmt.Sprintf("%.0f%%", 100*float64(snapshot.Swap.Used())/float64(snapshot.Swap.Total)))
+				} else {
+					values = append(values, "N/A")
+				}
+			case "remaining":
+				values = append(values, fmt.Sprintf("%.1f GB %s", float64(snapshot.Swap.Free)/1e9, lang.Text("free")))
+			}
+		}
+		return join(values, " · ")
+	case "gpu":
+		values := make([]string, 0, len(parts))
+		for _, part := range parts {
+			switch part {
+			case "name":
+				values = append(values, availableText(snapshot.GPU.Name))
+			case "cores":
+				if snapshot.GPU.Cores > 0 {
+					values = append(values, fmt.Sprintf("%d %s", snapshot.GPU.Cores, lang.Text("cores")))
+				} else {
+					values = append(values, "N/A")
+				}
+			}
+		}
+		return join(values, " · ")
 	case "platform":
 		return join([]string{snapshot.System.Platform + " · " + snapshot.System.Architecture + " · " + snapshot.System.Hostname}, "")
 	case "shell":
@@ -234,6 +285,76 @@ func dashboardEntry(snapshot systeminfo.Snapshot, settings config.Config, entry 
 		return join([]string{availableText(snapshot.System.Hostname)}, "")
 	case "ip":
 		return join([]string{availableText(snapshot.Network.IPAddress)}, "")
+	case "disk-io":
+		if !snapshot.DiskIO.Available {
+			return join([]string{"N/A"}, "")
+		}
+		values := make([]string, 0, len(parts))
+		for _, part := range parts {
+			switch part {
+			case "read":
+				values = append(values, "R "+rateValue(snapshot.DiskIO.ReadRate))
+			case "write":
+				values = append(values, "W "+rateValue(snapshot.DiskIO.WriteRate))
+			}
+		}
+		return join(values, " · ")
+	case "packet-loss":
+		loss := snapshot.Network.PacketLoss
+		if !loss.Available || loss.Samples == 0 {
+			return join([]string{"N/A"}, "")
+		}
+		values := make([]string, 0, len(parts))
+		for _, part := range parts {
+			switch part {
+			case "percent":
+				values = append(values, fmt.Sprintf("%.0f%%", 100*float64(loss.Lost)/float64(loss.Samples)))
+			case "samples":
+				values = append(values, fmt.Sprintf("%d/%d %s", loss.Lost, loss.Samples, lang.Text("lost")))
+			}
+		}
+		return join(values, " · ")
+	case "logged-users":
+		if !snapshot.LoggedUsers.Available {
+			return join([]string{"N/A"}, "")
+		}
+		values := make([]string, 0, len(parts))
+		for _, part := range parts {
+			switch part {
+			case "count":
+				label := "users"
+				if len(snapshot.LoggedUsers.Names) == 1 {
+					label = "user"
+				}
+				values = append(values, fmt.Sprintf("%d %s", len(snapshot.LoggedUsers.Names), lang.Text(label)))
+			case "names":
+				names := lang.Text("none")
+				if len(snapshot.LoggedUsers.Names) > 0 {
+					names = strings.Join(snapshot.LoggedUsers.Names, ", ")
+				}
+				values = append(values, names)
+			}
+		}
+		return join(values, " · ")
+	case "media-activity":
+		values := make([]string, 0, len(parts))
+		for _, part := range parts {
+			state := snapshot.Media.Microphone
+			label := lang.Text("Mic")
+			if part == "camera" {
+				state = snapshot.Media.Camera
+				label = lang.Text("Camera")
+			}
+			status := "N/A"
+			if state.Available {
+				status = lang.Text("Inactive")
+				if state.Active {
+					status = lang.Text("Active")
+				}
+			}
+			values = append(values, label+" "+status)
+		}
+		return join(values, " · ")
 	case "directory":
 		return join([]string{compactDirectory(snapshot.Directory)}, "")
 	case "temperature":
@@ -427,9 +548,30 @@ func dashboardEntry(snapshot systeminfo.Snapshot, settings config.Config, entry 
 		if snapshot.Volume.Total > 0 {
 			percentage = float64(snapshot.Volume.Used) / float64(snapshot.Volume.Total) * 100
 		}
-		values := orderedUsage(parts, snapshot.Volume.Available && snapshot.Volume.Total > 0, percentage, func() string {
-			return fmt.Sprintf("%.1f / %.1f GB", float64(snapshot.Volume.Used)/1e9, float64(snapshot.Volume.Total)/1e9)
-		})
+		free := uint64(0)
+		if snapshot.Volume.Used < snapshot.Volume.Total {
+			free = snapshot.Volume.Total - snapshot.Volume.Used
+		}
+		values := make([]string, 0, len(parts))
+		if !snapshot.Volume.Available || snapshot.Volume.Total == 0 {
+			return join([]string{"N/A"}, "")
+		}
+		for _, part := range parts {
+			switch part {
+			case "bar":
+				values = append(values, usageBar(percentage, 8))
+			case "percent":
+				values = append(values, fmt.Sprintf("%.0f%%", percentage))
+			case "value":
+				if hasPart(parts, "remaining") {
+					values = append(values, fmt.Sprintf("%.0f/%.0f GB", float64(snapshot.Volume.Used)/1e9, float64(snapshot.Volume.Total)/1e9))
+				} else {
+					values = append(values, fmt.Sprintf("%.1f / %.1f GB", float64(snapshot.Volume.Used)/1e9, float64(snapshot.Volume.Total)/1e9))
+				}
+			case "remaining":
+				values = append(values, fmt.Sprintf("%.1f GB %s", float64(free)/1e9, lang.Text("free")))
+			}
+		}
 		return join(values, " ")
 	case "battery":
 		values := make([]string, 0, len(parts)+1)

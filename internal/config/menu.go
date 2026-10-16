@@ -16,18 +16,25 @@ var menuItems = []struct {
 	{"uptime", "uptime", "SYSTEM", true, false},
 	{"date", "date", "SYSTEM", false, true},
 	{"hostname", "hostname", "SYSTEM", false, false},
+	{"media-activity", "media", "SYSTEM", false, true},
 	{"network-status", "status", "NETWORK", true, true},
 	{"network-traffic", "traffic", "NETWORK", true, true},
 	{"ip", "ip", "NETWORK", false, false},
+	{"packet-loss", "loss", "NETWORK", false, true},
 	{"cpu", "cpu", "RESOURCES", true, true},
 	{"cores", "cores", "RESOURCES", false, true},
 	{"ram", "ram", "RESOURCES", true, true},
+	{"load-average", "load", "RESOURCES", false, true},
+	{"swap", "swap", "RESOURCES", false, true},
+	{"gpu", "gpu", "RESOURCES", false, true},
 	{"volume", "volume", "RESOURCES", true, true},
+	{"disk-io", "disk I/O", "RESOURCES", false, true},
 	{"battery", "battery", "RESOURCES", true, true},
 	{"temperature", "thermal", "RESOURCES", false, false},
 	{"directory", "path", "SESSION", true, false},
 	{"spotify", "spotify", "SESSION", true, false},
 	{"progress", "progress", "SESSION", true, false},
+	{"logged-users", "users", "SESSION", false, true},
 	{"time", "time", "HEADER", true, false},
 }
 
@@ -66,8 +73,10 @@ func defaultComponentOrder(name string) []string {
 		return []string{"sparkline", "upload", "download", "latency"}
 	case "network-status":
 		return []string{"value", "connection", "name", "interface", "ip"}
-	case "cores", "volume":
+	case "cores":
 		return []string{"bar", "value", "percent"}
+	case "volume":
+		return []string{"bar", "value", "percent", "remaining"}
 	default:
 		return DisplayParts(name)
 	}
@@ -100,6 +109,12 @@ func completeMenuLayout(layout MenuLayout) MenuLayout {
 	for group, items := range defaults.Items {
 		if len(layout.Items[group]) == 0 {
 			layout.Items[group] = items
+			continue
+		}
+		for _, name := range items {
+			if !slices.Contains(layout.Items[group], name) {
+				layout.Items[group] = append(layout.Items[group], name)
+			}
 		}
 	}
 	if layout.Components == nil {
@@ -108,6 +123,12 @@ func completeMenuLayout(layout MenuLayout) MenuLayout {
 	for entry, parts := range defaults.Components {
 		if len(layout.Components[entry]) == 0 {
 			layout.Components[entry] = parts
+			continue
+		}
+		for _, part := range parts {
+			if !slices.Contains(layout.Components[entry], part) {
+				layout.Components[entry] = append(layout.Components[entry], part)
+			}
 		}
 	}
 	return layout
@@ -260,6 +281,22 @@ func DisplayParts(name string) []string {
 		return []string{"upload", "download", "latency", "sparkline"}
 	case "network-status":
 		return []string{"value", "interface", "ip", "connection", "name"}
+	case "disk-io":
+		return []string{"read", "write"}
+	case "load-average":
+		return []string{"one", "five", "fifteen"}
+	case "swap":
+		return []string{"value", "percent", "remaining"}
+	case "gpu":
+		return []string{"name", "cores"}
+	case "volume":
+		return []string{"bar", "percent", "value", "remaining"}
+	case "packet-loss":
+		return []string{"percent", "samples"}
+	case "logged-users":
+		return []string{"count", "names"}
+	case "media-activity":
+		return []string{"microphone", "camera"}
 	}
 	for _, item := range menuItems {
 		if item.name == name && item.parts {
@@ -289,6 +326,15 @@ func EntryShown(visible map[string]bool, name string) bool {
 
 // PartLabel supplies readable labels for CLI-independent UI controls.
 func PartLabel(name, part string) string {
+	if part == "remaining" && canonicalMenuItem(name) == "volume" {
+		return "Free space"
+	}
+	if part == "remaining" && canonicalMenuItem(name) == "swap" {
+		return "Free swap"
+	}
+	if part == "name" && canonicalMenuItem(name) == "gpu" {
+		return "GPU model"
+	}
 	if canonicalMenuItem(name) == "date" && part == "value" {
 		return "Date"
 	}
@@ -304,6 +350,9 @@ func PartLabel(name, part string) string {
 		"ip": "IP", "connection": "Connection", "name": "Network name",
 		"timezone": "Timezone", "utc": "UTC offset",
 		"upload": "Upload", "download": "Download", "latency": "Latency",
+		"read": "Read", "write": "Write", "samples": "Samples",
+		"count": "Count", "names": "Users", "microphone": "Microphone", "camera": "Camera",
+		"one": "1 min", "five": "5 min", "fifteen": "15 min", "cores": "Cores",
 	}
 	return labels[part]
 }
@@ -321,7 +370,7 @@ func Shown(visible map[string]bool, name string) bool {
 		}
 	}
 	switch name {
-	case "cpu.sparkline", "cpu.top", "ram.sparkline", "ram.pressure", "battery.bar", "battery.sparkline", "battery.remaining", "network-status.connection", "network-status.name", "date.timezone", "date.utc", "network-traffic.sparkline", "network-traffic.latency":
+	case "cpu.sparkline", "cpu.top", "ram.sparkline", "ram.pressure", "battery.bar", "battery.sparkline", "battery.remaining", "volume.remaining", "network-status.connection", "network-status.name", "date.timezone", "date.utc", "network-traffic.sparkline", "network-traffic.latency":
 		return false // New optional details preserve the existing header.
 	}
 	return true // Original component switches default to on.

@@ -54,6 +54,16 @@ switch. Press `Enter` to leave move mode, then save to apply the layout.
 You can also move a selected detail switch directly with `Shift+←/→`.
 CPU, RAM, network traffic, and battery can each show an optional eight-step
 sparkline summarizing the last minute; the existing detail switches remain independent.
+Optional rows also include disk read/write throughput, gateway-ping loss with
+sample counts, distinct locally logged-in users with names, and microphone/camera
+activity. Each has separate detail switches and starts hidden. Media activity is
+reported only when macOS exposes device status; otherwise it shows `N/A` (Linux
+currently reports `N/A`). Gateway-ping loss is not a measurement of all network
+traffic and may reflect blocked ICMP rather than an actual connection problem.
+Further optional resource rows show the 1/5/15-minute load averages, used/free
+swap, and the GPU model/core count reported by macOS. GPU utilization is not
+estimated; unavailable hardware details show `N/A`. The volume row also has
+an independent, default-off switch for remaining free space.
 Under **General → Language**, choose **Automatic (system)**, **English**, or
 **Deutsch** for the dashboard and settings. Automatic uses the system/terminal
 locale, with English as the fallback for other languages. Commands stay unchanged.

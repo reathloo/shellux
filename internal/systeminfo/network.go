@@ -16,6 +16,7 @@ type Network struct {
 	Connection   string
 	Name         string
 	Latency      Latency
+	PacketLoss   PacketLoss
 }
 
 type networkSample struct {

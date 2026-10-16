@@ -284,7 +284,7 @@ func TestAllNewComponentControlsRemainFocusable(t *testing.T) {
 	for _, size := range [][2]int{{64, 18}, {80, 24}, {96, 30}} {
 		m := newModel(config.Default(), func(config.Config) error { return nil })
 		m.Update(tea.WindowSizeMsg{Width: size[0], Height: size[1]})
-		for _, name := range []string{"cpu", "ram", "battery", "network-status", "network-traffic", "date"} {
+		for _, name := range []string{"cpu", "ram", "battery", "network-status", "network-traffic", "date", "disk-io", "packet-loss", "logged-users", "media-activity"} {
 			chooseRow(t, m, "toggle", name)
 			ordered := append([]string(nil), m.selectedRow().entry.Parts...)
 			for i, part := range ordered {

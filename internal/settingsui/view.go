@@ -291,6 +291,8 @@ func (m *model) entryPreview(entry string) string {
 		return m.tr("Connected") + " · Wi-Fi"
 	case "network-traffic":
 		return "↑1.4 · ↓8.2 MB/s"
+	case "packet-loss":
+		return "8% · 1/12 " + m.tr("lost")
 	case "ip":
 		return "192.168.1.24"
 	case "cpu":
@@ -299,8 +301,16 @@ func (m *model) entryPreview(entry string) string {
 		return "8 " + m.tr("cores") + " · 42%"
 	case "ram":
 		return "██████░░ 6.8 GiB"
+	case "load-average":
+		return "1m 1.92 · 5m 1.48 · 15m 1.20"
+	case "swap":
+		return "2.0 / 5.1 GB · 39%"
+	case "gpu":
+		return "Apple M1 · 7 " + m.tr("cores")
 	case "volume":
 		return "██████░░ 179/245G"
+	case "disk-io":
+		return "R 1.4 MB/s · W 0.8 MB/s"
 	case "battery":
 		return "42% ⚡"
 	case "temperature":
@@ -311,6 +321,10 @@ func (m *model) entryPreview(entry string) string {
 		return "Artist — Song"
 	case "progress":
 		return "▶ 1:24 ███░░░ 3:42"
+	case "logged-users":
+		return "2 " + m.tr("users") + " · alex, sam"
+	case "media-activity":
+		return m.tr("Mic") + " " + m.tr("Active") + " · " + m.tr("Camera") + " " + m.tr("Inactive")
 	case "time":
 		return "14:32:08"
 	}
@@ -324,21 +338,58 @@ func (m *model) componentPreview(entry, part string) string {
 	case "sparkline":
 		return "▂▃▅▇▆▄▂▃"
 	case "percent":
+		if entry == "packet-loss" {
+			return "8%"
+		}
+		if entry == "swap" {
+			return "39%"
+		}
 		return "42%"
+	case "one":
+		return "1m 1.92"
+	case "five":
+		return "5m 1.48"
+	case "fifteen":
+		return "15m 1.20"
+	case "cores":
+		return "7 " + m.tr("cores")
+	case "read":
+		return "R 1.4 MB/s"
+	case "write":
+		return "W 0.8 MB/s"
+	case "samples":
+		return "1/12 " + m.tr("lost")
+	case "count":
+		return "2 " + m.tr("users")
+	case "names":
+		return "alex, sam"
+	case "microphone":
+		return m.tr("Mic") + " " + m.tr("Active")
+	case "camera":
+		return m.tr("Camera") + " " + m.tr("Inactive")
 	case "top":
 		return "code (24%)"
 	case "pressure":
 		return m.tr("Normal")
 	case "remaining":
+		if entry == "volume" {
+			return "66.0 GB " + m.tr("free")
+		}
+		if entry == "swap" {
+			return "3.1 GB " + m.tr("free")
+		}
 		return "~3h 20m"
+	case "name":
+		if entry == "gpu" {
+			return "Apple M1"
+		}
+		return "Home Wi-Fi"
 	case "interface":
 		return "en0"
 	case "ip":
 		return "192.168.1.24"
 	case "connection":
 		return "Wi-Fi"
-	case "name":
-		return "Home Wi-Fi"
 	case "timezone":
 		return "Berlin"
 	case "utc":
@@ -355,6 +406,8 @@ func (m *model) componentPreview(entry, part string) string {
 			return "1.92 " + m.tr("load")
 		case "ram":
 			return "6.8 GiB"
+		case "swap":
+			return "2.0 / 5.1 GB"
 		case "volume":
 			return "179 / 245 GB"
 		case "battery":

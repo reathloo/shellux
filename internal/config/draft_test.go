@@ -1,11 +1,13 @@
 package config
 
 import (
+	"encoding/json"
 	"errors"
 	"maps"
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"testing"
 )
 
@@ -71,6 +73,62 @@ func TestLegacyConfigGetsDefaultMenuLayout(t *testing.T) {
 	c.MenuLayout.Components["cpu"] = []string{"bar", "bar", "value", "percent", "top"}
 	if err := c.Validate(); err == nil {
 		t.Fatal("invalid component permutation accepted")
+	}
+}
+
+func TestExistingMenuLayoutsGainNewOptionalItems(t *testing.T) {
+	c := Default()
+	if !c.MoveMenuGroup("RESOURCES", -1) || !c.MoveMenuGroup("RESOURCES", -1) || !c.MoveMenuItem("cpu", 1) {
+		t.Fatal("could not prepare existing custom order")
+	}
+	if _, err := c.StoreMenuPreset("mine"); err != nil {
+		t.Fatal(err)
+	}
+	wantCPU := slices.Index(c.MenuLayout.Items["RESOURCES"], "cpu")
+	removeNew := func(layout *MenuLayout) {
+		for _, name := range []string{"disk-io", "packet-loss", "logged-users", "media-activity", "load-average", "swap", "gpu"} {
+			for group, items := range layout.Items {
+				layout.Items[group] = slices.DeleteFunc(items, func(item string) bool { return item == name })
+			}
+			delete(layout.Components, name)
+		}
+		layout.Components["volume"] = slices.DeleteFunc(layout.Components["volume"], func(part string) bool { return part == "remaining" })
+	}
+	removeNew(&c.MenuLayout)
+	preset := c.MenuPresets["mine"]
+	removeNew(&preset.Layout)
+	c.MenuPresets["mine"] = preset
+	data, err := json.Marshal(c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := decodeConfig(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if loaded.MenuLayout.Groups[0] != "RESOURCES" || slices.Index(loaded.MenuLayout.Items["RESOURCES"], "cpu") != wantCPU {
+		t.Fatal("existing custom order changed")
+	}
+	for _, name := range []string{"disk-io", "packet-loss", "logged-users", "media-activity", "load-average", "swap", "gpu"} {
+		found := false
+		for _, items := range loaded.MenuLayout.Items {
+			found = found || slices.Contains(items, name)
+		}
+		if !found {
+			t.Fatalf("new menu item %s missing", name)
+		}
+		if len(loaded.MenuLayout.Components[name]) != len(DisplayParts(name)) || len(loaded.MenuPresets["mine"].Layout.Components[name]) != len(DisplayParts(name)) {
+			t.Fatalf("new switches for %s missing", name)
+		}
+		if loaded.Visible[name] {
+			t.Fatalf("new menu item %s unexpectedly enabled", name)
+		}
+	}
+	if got := loaded.MenuLayout.Components["volume"]; !slices.Equal(got, []string{"bar", "value", "percent", "remaining"}) {
+		t.Fatalf("existing volume order or new switch lost: %v", got)
+	}
+	if Shown(loaded.Visible, "volume.remaining") {
+		t.Fatal("new remaining-space switch unexpectedly enabled")
 	}
 }
 

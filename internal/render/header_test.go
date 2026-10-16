@@ -419,6 +419,89 @@ func TestUsageComponentsRenderIndependently(t *testing.T) {
 	}
 }
 
+func TestNewSystemEntriesRenderIndependentSwitches(t *testing.T) {
+	snapshot := systeminfo.Snapshot{
+		DiskIO:      systeminfo.DiskIO{ReadRate: 2 * 1024 * 1024, WriteRate: 512 * 1024, Available: true},
+		Network:     systeminfo.Network{PacketLoss: systeminfo.PacketLoss{Lost: 1, Samples: 12, Available: true}},
+		LoggedUsers: systeminfo.LoggedUsers{Names: []string{"alex", "sam"}, Available: true},
+		Media: systeminfo.MediaActivity{
+			Microphone: systeminfo.DeviceActivity{Active: true, Available: true},
+			Camera:     systeminfo.DeviceActivity{Available: true},
+		},
+	}
+	for _, tc := range []struct{ name, first, second string }{
+		{"disk-io", "R 2.0 MB/s", "W 512 KB/s"},
+		{"packet-loss", "8%", "1/12 lost"},
+		{"logged-users", "2 users", "alex, sam"},
+		{"media-activity", "Mic Active", "Camera Inactive"},
+	} {
+		parts := config.DisplayParts(tc.name)
+		if len(parts) != 2 {
+			t.Fatalf("%s has %d switches", tc.name, len(parts))
+		}
+		for i, want := range []string{tc.first, tc.second} {
+			visible := config.Default().Visible
+			for key := range visible {
+				visible[key] = false
+			}
+			visible[tc.name], visible[tc.name+"."+parts[i]] = true, true
+			output := stripANSI(strings.Join(NewHeaderLayout(snapshot, "eye", theme.DarkLuxury(), visible).Dashboard, "\n"))
+			if !strings.Contains(output, want) || config.MenuSlots(visible) != 1 {
+				t.Fatalf("%s.%s = %q", tc.name, parts[i], output)
+			}
+		}
+	}
+	snapshot.LoggedUsers.Names = []string{"alex"}
+	visible := config.Default().Visible
+	for key := range visible {
+		visible[key] = false
+	}
+	visible["logged-users"], visible["logged-users.count"] = true, true
+	if output := stripANSI(strings.Join(NewHeaderLayout(snapshot, "eye", theme.DarkLuxury(), visible).Dashboard, "\n")); !strings.Contains(output, "1 user") {
+		t.Fatalf("singular user count = %q", output)
+	}
+}
+
+func TestExtraResourceSwitches(t *testing.T) {
+	snapshot := systeminfo.Snapshot{
+		Load:   systeminfo.LoadAverages{One: 1.92, Five: 1.48, Fifteen: 1.20, Available: true},
+		Swap:   systeminfo.Swap{Total: 5e9, Free: 3e9, Available: true},
+		GPU:    systeminfo.GPU{Name: "Apple M1", Cores: 7, Available: true},
+		Volume: systeminfo.Volume{Total: 245e9, Used: 179e9, Available: true},
+	}
+	for _, tc := range []struct{ entry, part, want string }{
+		{"load-average", "one", "1m 1.92"}, {"load-average", "five", "5m 1.48"}, {"load-average", "fifteen", "15m 1.20"},
+		{"swap", "value", "2.0 / 5.0 GB"}, {"swap", "percent", "40%"}, {"swap", "remaining", "3.0 GB free"},
+		{"gpu", "name", "Apple M1"}, {"gpu", "cores", "7 cores"}, {"volume", "remaining", "66.0 GB free"},
+	} {
+		visible := config.Default().Visible
+		for key := range visible {
+			visible[key] = false
+		}
+		visible[tc.entry] = true
+		for _, part := range config.DisplayParts(tc.entry) {
+			visible[tc.entry+"."+part] = false
+		}
+		visible[tc.entry+"."+tc.part] = true
+		output := stripANSI(strings.Join(NewHeaderLayout(snapshot, "eye", theme.DarkLuxury(), visible).Dashboard, "\n"))
+		if !strings.Contains(output, tc.want) || config.MenuSlots(visible) != 1 {
+			t.Fatalf("%s.%s: %q", tc.entry, tc.part, output)
+		}
+	}
+	visible := config.Default().Visible
+	for key := range visible {
+		visible[key] = false
+	}
+	visible["volume"] = true
+	for _, part := range config.DisplayParts("volume") {
+		visible["volume."+part] = true
+	}
+	output := stripANSI(strings.Join(NewHeaderLayout(snapshot, "eye", theme.DarkLuxury(), visible).Dashboard, "\n"))
+	if !strings.Contains(output, "66.0 GB free") {
+		t.Fatalf("remaining capacity was clipped: %q", output)
+	}
+}
+
 func TestNewHeaderComponentsAndSharedSlot(t *testing.T) {
 	snapshot := systeminfo.Snapshot{
 		CPU:         systeminfo.CPU{Cores: 4, LoadAverage: 2, TopProcess: systeminfo.Process{Name: "worker", CPUPercent: 145, Available: true}},
