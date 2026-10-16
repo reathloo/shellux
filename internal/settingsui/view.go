@@ -201,7 +201,7 @@ func (m *model) mainView(width, height int, styles uiStyles) string {
 		help = m.tr("↑/↓: layout · Enter: apply/save · Delete: remove saved layout")
 	}
 	if m.focus == 1 && m.section == themesSection {
-		help = m.tr("↑/↓: theme · Enter: apply · Delete: remove custom theme")
+		help = m.tr("↑/↓: theme · Enter: apply · F: favorite · U: uninstall")
 	}
 	return strings.Join([]string{
 		line(styles.heading(title, 0), width), line("", width), strings.Join(body, "\n"), line("", width),

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"reflect"
+	"slices"
 	"strings"
 
 	"charm.land/bubbles/v2/textinput"
@@ -95,10 +96,12 @@ type model struct {
 	downloading             bool
 	downloadID              int
 	refresh, refreshStarted bool
+	installedThemes         map[string]bool
+	checkInstalled          func(string) bool
 }
 
 func newModel(c config.Config, save func(config.Config) error) *model {
-	m := &model{original: c.Clone(), draft: c.Clone(), save: save, width: 96, height: 30, result: Cancelled}
+	m := &model{original: c.Clone(), draft: c.Clone(), save: save, width: 96, height: 30, result: Cancelled, checkInstalled: themepack.IsInstalled}
 	m.cursors[0] = 1 // first row is the SYSTEM heading
 	return m
 }
@@ -106,6 +109,17 @@ func (m *model) Init() tea.Cmd           { return nil }
 func (m *model) dirty() bool             { return !reflect.DeepEqual(m.original, m.draft) }
 func (m *model) small() bool             { return m.width < 64 || m.height < 18 }
 func (m *model) finish(code int) tea.Cmd { m.result = code; m.done = true; return tea.Quit }
+func (m *model) isInstalled(name string) bool {
+	if installed, ok := m.installedThemes[name]; ok {
+		return installed
+	}
+	if m.installedThemes == nil {
+		m.installedThemes = make(map[string]bool)
+	}
+	installed := m.checkInstalled(name)
+	m.installedThemes[name] = installed
+	return installed
+}
 func (m *model) saveDraft() tea.Cmd {
 	if err := m.draft.Validate(); err != nil {
 		m.notice = friendly(err)
@@ -161,11 +175,15 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.downloading {
 				return m, nil
 			}
-			m.notice = "Theme catalog offline; showing saved choices."
+			m.notice = m.tr("Theme update check failed: ") + friendly(msg.err)
 			return m, nil
 		}
 		selected := m.selectedRow().value
 		themepack.UseCatalog(msg.catalog)
+		if msg.updated > 0 {
+			m.installedThemes = nil
+			m.notice = fmt.Sprintf(m.tr("Updated %d installed theme(s)."), msg.updated)
+		}
 		for i, r := range m.rows() {
 			if r.value == selected {
 				m.cursors[m.section] = i
@@ -314,6 +332,28 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.modal = &dialog{kind: "confirm", title: fmt.Sprintf(m.tr("Delete menu preset %q?"), r.value), action: "delete-preset", value: r.value}
 				}
 			}
+		case "f":
+			if m.focus == 1 && m.section == themesSection {
+				r := m.selectedRow()
+				if r.action == "theme" {
+					if err := m.draft.ToggleFavoriteTheme(r.value); err != nil {
+						m.notice = friendly(err)
+					} else {
+						m.selectThemeRow(r.value)
+					}
+				}
+			}
+		case "u":
+			if m.focus == 1 && m.section == themesSection {
+				r := m.selectedRow()
+				if r.action == "theme" && m.isInstalled(r.value) {
+					if slices.Contains(m.original.RequiredPackages(), r.value) || slices.Contains(m.draft.RequiredPackages(), r.value) {
+						m.notice = m.tr("Select and save another theme before uninstalling this one.")
+					} else {
+						m.modal = &dialog{kind: "confirm", title: fmt.Sprintf(m.tr("Uninstall downloaded theme %q now?"), r.value), action: "uninstall", value: r.value}
+					}
+				}
+			}
 		case "space", "enter":
 			switch m.focus {
 			case 0:
@@ -377,6 +417,9 @@ func (m *model) rows() []row {
 			if t.Custom {
 				desc += m.tr(" · Delete: remove custom theme")
 			}
+			if t.Name != "default" {
+				desc += m.tr(" · F: favorite")
+			}
 			mark := "[ ]"
 			if m.draft.Animation == t.Animation && config.DisplayStyle(m.draft.Style) == t.Style && m.draft.Background == t.Background {
 				mark = "[✓]"
@@ -384,15 +427,21 @@ func (m *model) rows() []row {
 			kind := m.tr("built-in")
 			if e, ok := themepack.Lookup(t.Name); ok {
 				kind = fmt.Sprintf("Download · %.0f KB", float64(e.Size)/1024)
-				desc += m.tr(" · Downloaded only when you save.")
-				if themepack.IsInstalled(t.Name) {
+				if m.isInstalled(t.Name) {
 					kind = m.tr("Installed")
+					desc += m.tr(" · U: uninstall now (keeps theme in catalog)")
+				} else {
+					desc += m.tr(" · Downloaded only when you save.")
 				}
 			}
 			if t.Custom {
 				kind = m.tr("custom")
 			}
-			rows = append(rows, row{label: mark + " " + t.Name + " · " + kind, action: "theme", value: t.Name, color: t.Background, custom: t.Custom, description: desc})
+			favorite := ""
+			if m.draft.FavoriteThemes[t.Name] {
+				favorite = "★ "
+			}
+			rows = append(rows, row{label: mark + " " + favorite + t.Name + " · " + kind, action: "theme", value: t.Name, color: t.Background, custom: t.Custom, description: desc})
 		}
 		rows = append(rows, row{label: "Random combination", action: "random", description: "Combine an animation with a random style and matching background."}, row{label: "Save current combination as a theme…", action: "new", description: fmt.Sprintf(m.tr("Current: %s · %s · %s. Save as a custom theme."), m.draft.Animation, config.DisplayStyle(m.draft.Style), m.draft.BackgroundName())})
 		return rows
@@ -404,6 +453,15 @@ func (m *model) rows() []row {
 		}
 	default:
 		return []row{{label: "Refresh interval", action: "interval", value: m.draft.RefreshInterval, description: "A positive Go duration, such as 1s, 500ms or 2.5s."}, {label: "Language", action: "language", value: languageName(m.draft.Language), description: "Choose the dashboard and settings language. Automatic follows your system locale."}}
+	}
+}
+
+func (m *model) selectThemeRow(name string) {
+	for i, r := range m.rows() {
+		if r.action == "theme" && r.value == name {
+			m.cursors[themesSection] = i
+			return
+		}
 	}
 }
 func (m *model) selectedRow() row {
@@ -613,6 +671,17 @@ func (m *model) updateDialog(msg tea.Msg) tea.Cmd {
 					m.notice = friendly(err)
 				}
 				m.cursors[themesSection] = min(m.cursors[themesSection], len(m.rows())-1)
+			case "uninstall":
+				store, err := themepack.DefaultStore()
+				if err == nil {
+					err = store.Uninstall(d.value)
+				}
+				if err != nil {
+					m.notice = m.tr("Could not uninstall theme: ") + friendly(err)
+				} else {
+					m.installedThemes[d.value] = false
+					m.notice = fmt.Sprintf(m.tr("Theme %q uninstalled."), d.value)
+				}
 			case "delete-preset":
 				if err := m.draft.RemoveMenuPreset(d.value); err != nil {
 					m.notice = friendly(err)
@@ -699,6 +768,7 @@ type downloadResult struct {
 }
 type catalogResult struct {
 	catalog themepack.Catalog
+	updated int
 	err     error
 }
 
@@ -712,13 +782,17 @@ func (m *model) refreshCatalog() tea.Cmd {
 			return catalogResult{err: err}
 		}
 		c, err := s.Refresh(ctx)
-		return catalogResult{catalog: c, err: err}
+		if err != nil {
+			return catalogResult{err: err}
+		}
+		updated, err := s.UpdateInstalled(ctx, c)
+		return catalogResult{catalog: c, updated: updated, err: err}
 	}
 }
 
 func (m *model) packageLabel(name string) string {
 	if e, ok := themepack.Lookup(name); ok {
-		if themepack.IsInstalled(name) {
+		if m.isInstalled(name) {
 			return name + " · " + m.tr("Installed")
 		}
 		return fmt.Sprintf("%s · Download %.0f KB", name, float64(e.Size)/1024)

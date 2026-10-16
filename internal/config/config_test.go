@@ -2,6 +2,7 @@ package config
 
 import (
 	"bytes"
+	"encoding/json"
 	"io"
 	"os"
 	"path/filepath"
@@ -390,6 +391,34 @@ func TestThemeOperationsRejectReservedNames(t *testing.T) {
 	}
 	if _, _, err := DeleteTheme("orangedragon"); err == nil {
 		t.Fatal("DeleteTheme() accepted built-in theme")
+	}
+}
+
+func TestFavoriteThemesSortAndClone(t *testing.T) {
+	c := Default()
+	if err := c.ToggleFavoriteTheme("purplemonster"); err != nil {
+		t.Fatal(err)
+	}
+	if !c.FavoriteThemes["purplemonster"] || c.ThemeOptions()[1].Name != "purplemonster" {
+		t.Fatal("favorite not shown first")
+	}
+	clone := c.Clone()
+	if err := clone.ToggleFavoriteTheme("purplemonster"); err != nil {
+		t.Fatal(err)
+	}
+	if !c.FavoriteThemes["purplemonster"] || clone.FavoriteThemes != nil {
+		t.Fatal("favorite clone changed original")
+	}
+	if err := c.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	data, err := json.Marshal(c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reloaded, err := decodeConfig(data)
+	if err != nil || !reloaded.FavoriteThemes["purplemonster"] {
+		t.Fatalf("favorite was not persisted: %v", err)
 	}
 }
 

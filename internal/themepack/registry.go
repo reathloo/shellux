@@ -4,8 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
+	"strings"
 	"sync"
 
 	"github.com/reathloo/shellux/themes"
@@ -102,6 +105,67 @@ func (s *Store) Install(ctx context.Context, e Entry) (*Package, error) {
 		return nil, err
 	}
 	return p, nil
+}
+
+// UpdateInstalled checks only themes with a local receipt. An unsuccessful
+// download leaves the previous receipt and archive usable offline.
+func (s *Store) UpdateInstalled(ctx context.Context, catalog Catalog) (int, error) {
+	updated := 0
+	for _, latest := range catalog.Themes {
+		current, err := s.Installed(latest.Name)
+		if os.IsNotExist(err) {
+			continue
+		}
+		if err != nil {
+			return updated, err
+		}
+		if !newerVersion(latest.Version, current.Version) {
+			continue
+		}
+		if _, err := s.Install(ctx, latest); err != nil {
+			return updated, fmt.Errorf("update %s: %w", latest.Name, err)
+		}
+		updated++
+	}
+	return updated, nil
+}
+
+func newerVersion(candidate, installed string) bool {
+	a, b := strings.Split(candidate, "."), strings.Split(installed, ".")
+	if len(a) != 3 || len(b) != 3 {
+		return false
+	}
+	for i := range a {
+		x, errA := strconv.ParseUint(a[i], 10, 64)
+		y, errB := strconv.ParseUint(b[i], 10, 64)
+		if errA != nil || errB != nil {
+			return false
+		}
+		if x != y {
+			return x > y
+		}
+	}
+	return false
+}
+
+// Uninstall removes only the named package's receipt and archive files.
+func (s *Store) Uninstall(name string) error {
+	if _, err := s.Installed(name); err != nil {
+		return err
+	}
+	if err := os.Remove(filepath.Join(s.Directory, name+".installed.json")); err != nil {
+		return err
+	}
+	paths, err := filepath.Glob(filepath.Join(s.Directory, name+"-*.shellux-theme"))
+	if err != nil {
+		return err
+	}
+	for _, path := range paths {
+		if err := os.Remove(path); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // Import installs a local archive through the same checks as a download.

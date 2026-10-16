@@ -13,6 +13,7 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/reathloo/shellux/internal/config"
+	"github.com/reathloo/shellux/internal/themepack"
 )
 
 func press(m *model, key string) {
@@ -81,6 +82,59 @@ func chooseRow(t *testing.T, m *model, action, value string) {
 		}
 	}
 	t.Fatalf("missing row %s %s", action, value)
+}
+
+func TestThemeFavoriteAndUninstallControls(t *testing.T) {
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	entry, ok := themepack.Lookup("purplemonster")
+	if !ok {
+		t.Fatal("missing catalog theme")
+	}
+	archive, err := os.ReadFile("../../themes/" + entry.Package)
+	if err != nil {
+		t.Fatal(err)
+	}
+	store, err := themepack.DefaultStore()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Import(entry, archive); err != nil {
+		t.Fatal(err)
+	}
+	m := newModel(config.Default(), func(config.Config) error { return nil })
+	m.section = themesSection
+	chooseRow(t, m, "theme", entry.Name)
+	press(m, "f")
+	if !m.draft.FavoriteThemes[entry.Name] || m.original.FavoriteThemes[entry.Name] || m.selectedRow().value != entry.Name {
+		t.Fatal("favorite did not stay selected in the draft")
+	}
+	press(m, "u")
+	if m.modal == nil || m.modal.action != "uninstall" {
+		t.Fatal("uninstall confirmation missing")
+	}
+	press(m, "right")
+	press(m, "enter")
+	if themepack.IsInstalled(entry.Name) || m.modal != nil {
+		t.Fatal("theme was not uninstalled")
+	}
+}
+
+func TestThemeInstallStatusIsCheckedOncePerSettingsSession(t *testing.T) {
+	m := newModel(config.Default(), nil)
+	m.section = themesSection
+	calls := map[string]int{}
+	m.checkInstalled = func(name string) bool {
+		calls[name]++
+		return name == "purplemonster"
+	}
+	for i := 0; i < 3; i++ {
+		m.rows()
+		m.View()
+		m.packageLabel("purplemonster")
+	}
+	if calls["purplemonster"] != 1 {
+		t.Fatalf("theme package checked %d times", calls["purplemonster"])
+	}
 }
 
 func TestKeyboardNavigationAndDraftSwitches(t *testing.T) {

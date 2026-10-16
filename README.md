@@ -66,6 +66,12 @@ Use the **arrow keys** to navigate, **Tab** to switch sections, and **Space / En
 Changes take effect only when you **Save**, which restarts the header and clears scrollback.
 **Cancel** discards your changes. Additional themes download only when you save
 and remain available offline afterward. The default theme, general styles, and basic colors are built in.
+In **Themes**, press `F` to mark a theme as a favorite (save to keep the change).
+Press `U` on an installed catalog theme to uninstall its downloaded files after
+confirmation; this takes effect immediately. Switch away from an active theme and
+save first. When you open **Themes**, Shellux checks the catalog and automatically
+updates already installed packages to newer verified versions. The header itself
+does not access the network.
 
 ## Everyday use
 

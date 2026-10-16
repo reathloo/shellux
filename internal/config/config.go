@@ -56,6 +56,7 @@ type Config struct {
 	MenuLayout      MenuLayout                 `json:"menu_layout"`
 	MenuPresets     map[string]SavedMenuPreset `json:"menu_presets,omitempty"`
 	Themes          map[string]SavedTheme      `json:"themes,omitempty"`
+	FavoriteThemes  map[string]bool            `json:"favorite_themes,omitempty"`
 }
 
 func Default() Config {
@@ -252,7 +253,41 @@ func (c Config) ThemeOptions() []ThemeInfo {
 		entry := c.Themes[name]
 		result = append(result, ThemeInfo{Name: name, Animation: entry.Animation, Style: DisplayStyle(entry.Style), Background: entry.Background, Custom: true})
 	}
+	// Keep the default first and show favorites before the other choices.
+	sort.SliceStable(result[1:], func(i, j int) bool {
+		return c.FavoriteThemes[result[i+1].Name] && !c.FavoriteThemes[result[j+1].Name]
+	})
 	return result
+}
+
+func (c *Config) ToggleFavoriteTheme(name string) error {
+	if name == "default" {
+		return fmt.Errorf("the default theme is already pinned")
+	}
+	found := false
+	for _, option := range c.ThemeOptions() {
+		if option.Name == name {
+			found = true
+			break
+		}
+	}
+	if !found {
+		return fmt.Errorf("unknown theme %q", name)
+	}
+	next := c.Clone()
+	if next.FavoriteThemes == nil {
+		next.FavoriteThemes = map[string]bool{}
+	}
+	if next.FavoriteThemes[name] {
+		delete(next.FavoriteThemes, name)
+	} else {
+		next.FavoriteThemes[name] = true
+	}
+	if len(next.FavoriteThemes) == 0 {
+		next.FavoriteThemes = nil
+	}
+	*c = next
+	return nil
 }
 
 // SetTheme applies a built-in, custom, default, or random theme.
@@ -363,6 +398,7 @@ func (c *Config) RemoveTheme(name string) (string, error) {
 		return "", fmt.Errorf("custom theme %q does not exist", name)
 	}
 	delete(c.Themes, name)
+	delete(c.FavoriteThemes, name)
 	if len(c.Themes) == 0 {
 		c.Themes = nil
 	}
@@ -460,6 +496,21 @@ func (c Config) Validate() error {
 		}
 		if _, err := BackgroundColor(saved.Background); err != nil {
 			return fmt.Errorf("theme %q: %w", name, err)
+		}
+	}
+	for name, favorite := range c.FavoriteThemes {
+		if !favorite {
+			return fmt.Errorf("favorite theme %q must be true", name)
+		}
+		found := false
+		for _, option := range c.ThemeOptions() {
+			if option.Name == name {
+				found = true
+				break
+			}
+		}
+		if !found || name == "default" {
+			return fmt.Errorf("unknown favorite theme %q", name)
 		}
 	}
 	return nil

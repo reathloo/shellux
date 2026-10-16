@@ -16,6 +16,7 @@ func (c Config) Clone() Config {
 		c.Visible = defaultVisibility()
 	}
 	c.Themes = maps.Clone(c.Themes)
+	c.FavoriteThemes = maps.Clone(c.FavoriteThemes)
 	c.MenuLayout.Groups = append([]string(nil), c.MenuLayout.Groups...)
 	c.MenuLayout.Items = cloneStringSlices(c.MenuLayout.Items)
 	c.MenuLayout.Components = cloneStringSlices(c.MenuLayout.Components)

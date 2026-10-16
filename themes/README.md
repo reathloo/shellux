@@ -16,6 +16,12 @@ Der Katalog wird beim ersten Öffnen des Theme-Bereichs im Hintergrund aktualisi
 Ohne Verbindung bleibt die mitgelieferte beziehungsweise gespeicherte Liste nutzbar.
 Der normale Header startet ohne Netzwerkzugriff. Fehlt eine zuvor ausgewählte
 Animation, verwendet er vorübergehend das Standardtheme und erhält die Auswahl.
+Beim Öffnen werden bereits installierte Pakete automatisch auf neuere, geprüfte
+Katalogversionen aktualisiert. Fehlgeschlagene Updates lassen die bisherige Version
+installiert. Im Theme-Bereich markiert `F` ein Theme als Favorit; diese Auswahl wird
+mit Save gespeichert. `U` deinstalliert ein heruntergeladenes Paket nach Bestätigung
+sofort. Ein aktives Theme muss zuvor gewechselt und gespeichert werden. Das Theme
+bleibt anschließend im Katalog und kann später erneut installiert werden.
 
 ## Neues Theme vorbereiten
 
@@ -112,10 +118,10 @@ Für einen eigenen HTTPS-Katalog kann `SHELLUX_THEME_CATALOG_URL` gesetzt werden
 Relative Paketpfade werden unter derselben Adresse aufgelöst. Dieser Override
 wird auch für isolierte Tests genutzt.
 
-Installierte Versionen bleiben lokal festgehalten. Katalogupdates ersetzen sie
-nicht automatisch. Eine eigene Oberfläche für Paketupdates und Deinstallation
-ist noch nicht Teil dieser Umsetzung. Eigene gespeicherte Theme-Kombinationen
-bleiben erhalten; heruntergeladen werden nur Pakete der aktiven Kombination.
+Installierte Versionen bleiben lokal festgehalten und werden nur beim Öffnen des
+Theme-Bereichs aktualisiert, nicht bei jedem Header-Start. Eigene gespeicherte
+Theme-Kombinationen bleiben erhalten; heruntergeladen werden ansonsten nur Pakete
+der aktiven Kombination.
 
 Die Tests prüfen Pakete, Offline-Nutzung, Downloadfehler, Abbruch und
 Konfigurationskonflikte. Der PTY-Test prüft Zsh/Bash mit einem lokal installierten
