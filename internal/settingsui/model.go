@@ -23,6 +23,15 @@ const (
 	Interrupted = 130
 )
 
+const (
+	menuSection = iota
+	presetsSection
+	themesSection
+	appearanceSection
+	generalSection
+	sectionCount
+)
+
 // Run always lets Bubble Tea restore the terminal before returning an exit code.
 func Run() (int, config.Config, error) {
 	if !term.IsTerminal(os.Stdin.Fd()) || !term.IsTerminal(os.Stdout.Fd()) {
@@ -74,9 +83,10 @@ type model struct {
 	save                    func(config.Config) error
 	width, height           int
 	section, focus, part    int // focus: navigation, content, save, cancel
-	cursors                 [4]int
+	cursors                 [sectionCount]int
 	modal                   *dialog
 	notice                  string
+	moveMode                bool
 	result                  int
 	done                    bool
 	ensure                  func(context.Context, config.Config) error
@@ -207,6 +217,27 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.modal != nil {
 			return m, m.updateDialog(msg)
 		}
+		if m.moveMode {
+			switch key {
+			case "m", "enter", "esc":
+				m.moveMode = false
+			case "up", "down":
+				step := 1
+				if key == "up" {
+					step = -1
+				}
+				m.moveMenuRow(step)
+			case "left", "right":
+				step := 1
+				if key == "left" {
+					step = -1
+				}
+				m.moveMenuPart(step)
+			case "ctrl+s":
+				return m, m.saveDraft()
+			}
+			return m, nil
+		}
 		switch key {
 		case "ctrl+s":
 			return m, m.saveDraft()
@@ -216,15 +247,36 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.focus = (m.focus + 1) % 4
 		case "shift+tab":
 			m.focus = (m.focus + 3) % 4
+		case "m":
+			if m.focus == 1 && m.section == 0 {
+				r := m.selectedRow()
+				m.moveMode = r.action == "group" || r.action == "toggle"
+			}
+		case "shift+up", "shift+down":
+			if m.focus == 1 && m.section == 0 {
+				step := 1
+				if key == "shift+up" {
+					step = -1
+				}
+				m.moveMenuRow(step)
+			}
+		case "shift+left", "shift+right":
+			if m.focus == 1 && m.section == 0 {
+				step := 1
+				if key == "shift+left" {
+					step = -1
+				}
+				m.moveMenuPart(step)
+			}
 		case "up", "down":
 			step := 1
 			if key == "up" {
 				step = -1
 			}
 			if m.focus == 0 {
-				m.section = (m.section + step + 4) % 4
+				m.section = (m.section + step + sectionCount) % sectionCount
 				m.part = 0
-				if m.section == 1 && m.refresh && !m.refreshStarted {
+				if m.section == themesSection && m.refresh && !m.refreshStarted {
 					return m, m.refreshCatalog()
 				}
 			} else if m.focus == 1 {
@@ -233,7 +285,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "left", "right":
 			if m.focus == 1 && m.section == 0 {
 				r := m.selectedRow()
-				n := len(r.entry.Parts) + 1
+				n := len(r.entry.Parts) + 2 // item name, Enabled, components
 				if r.action == "toggle" {
 					step := 1
 					if key == "left" {
@@ -249,12 +301,17 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 		case "delete", "backspace":
-			if m.focus == 1 && m.section == 1 {
+			if m.focus == 1 && m.section == themesSection {
 				r := m.selectedRow()
 				if r.custom {
 					m.modal = &dialog{kind: "confirm", title: fmt.Sprintf(m.tr("Delete custom theme %q?"), r.value), action: "delete", value: r.value}
 				} else {
 					m.notice = "Catalog themes are protected."
+				}
+			} else if m.focus == 1 && m.section == presetsSection {
+				r := m.selectedRow()
+				if r.action == "preset" && r.custom {
+					m.modal = &dialog{kind: "confirm", title: fmt.Sprintf(m.tr("Delete menu preset %q?"), r.value), action: "delete-preset", value: r.value}
 				}
 			}
 		case "space", "enter":
@@ -285,15 +342,35 @@ func (m *model) rows() []row {
 	case 0:
 		rows := []row{}
 		group := ""
-		for _, e := range config.MenuEntries() {
+		for _, e := range m.draft.OrderedMenuEntries() {
 			if e.Group != group {
 				group = e.Group
-				rows = append(rows, row{label: group, heading: true})
+				rows = append(rows, row{label: group, action: "group", value: group, description: "Press M, then use Up/Down to move this complete section.", heading: true})
 			}
 			rows = append(rows, row{label: e.Name, action: "toggle", entry: e})
 		}
-		return append(rows, row{label: "Reset menu items", action: "reset", description: "Reset items and components only; appearance stays unchanged."})
-	case 1:
+		return append(rows, row{label: "Reset menu items", action: "reset", description: "Reset items, components and their order; appearance stays unchanged."})
+	case presetsSection:
+		rows := []row{}
+		for _, name := range m.draft.MenuPresetOptions() {
+			mark := "[ ]"
+			if m.draft.MenuPresetMatches(name) {
+				mark = "[✓]"
+			}
+			description := "Apply this menu layout: visible items, detail switches and order. Theme and general settings stay unchanged."
+			if name == "default" {
+				description = "Restore the built-in menu layout. Saved layouts stay available."
+			} else {
+				description += " Delete removes only this saved layout."
+			}
+			label := name
+			if name == "default" {
+				label = m.tr("Default menu")
+			}
+			rows = append(rows, row{label: mark + " " + label, action: "preset", value: name, custom: name != "default", description: description})
+		}
+		return append(rows, row{label: "Save current menu as a layout…", action: "new-preset", description: "Save visible menu items, detail switches and order under a name; theme and general settings stay unchanged."})
+	case themesSection:
 		rows := []row{}
 		for _, t := range m.draft.ThemeOptions() {
 			desc := fmt.Sprintf(m.tr("Animation: %s · Style: %s · Background: %s"), t.Animation, t.Style, config.DisplayBackground(t.Background))
@@ -319,7 +396,7 @@ func (m *model) rows() []row {
 		}
 		rows = append(rows, row{label: "Random combination", action: "random", description: "Combine an animation with a random style and matching background."}, row{label: "Save current combination as a theme…", action: "new", description: fmt.Sprintf(m.tr("Current: %s · %s · %s. Save as a custom theme."), m.draft.Animation, config.DisplayStyle(m.draft.Style), m.draft.BackgroundName())})
 		return rows
-	case 2:
+	case appearanceSection:
 		return []row{
 			{label: "Animation", action: "animation", value: m.draft.Animation, description: "Choose an animation; style and background stay unchanged."},
 			{label: "Style", action: "style", value: config.DisplayStyle(m.draft.Style), description: "Choose header colors independently of the theme."},
@@ -336,13 +413,55 @@ func (m *model) selectedRow() row {
 }
 func (m *model) moveRow(step int) {
 	rows := m.rows()
-	i := m.cursors[m.section]
-	for next := i + step; next >= 0 && next < len(rows); next += step {
-		if !rows[next].heading {
-			m.cursors[m.section] = next
-			m.part = 0
+	next := m.cursors[m.section] + step
+	if next >= 0 && next < len(rows) {
+		m.cursors[m.section] = next
+		m.part = 0
+	}
+}
+
+func (m *model) selectMenuRow(action, value string) {
+	for index, candidate := range m.rows() {
+		if candidate.action == action && (candidate.value == value || candidate.entry.Key == value) {
+			m.cursors[0] = index
 			return
 		}
+	}
+}
+
+func (m *model) moveMenuRow(step int) {
+	r := m.selectedRow()
+	moved := false
+	switch {
+	case r.action == "group":
+		moved = m.draft.MoveMenuGroup(r.value, step)
+		m.selectMenuRow("group", r.value)
+	case r.action == "toggle":
+		moved = m.draft.MoveMenuItem(r.entry.Key, step)
+		m.selectMenuRow("toggle", r.entry.Key)
+	default:
+		return
+	}
+	if moved {
+		m.notice = "Menu order changed. Save to apply it."
+	} else if r.action == "group" && r.value == "HEADER" {
+		m.notice = "The header clock is fixed in the title."
+	} else {
+		m.notice = "Already at the edge of this section."
+	}
+}
+
+func (m *model) moveMenuPart(step int) {
+	r := m.selectedRow()
+	if r.action != "toggle" || m.part < 2 || m.part > len(r.entry.Parts)+1 {
+		return
+	}
+	part := r.entry.Parts[m.part-2]
+	if m.draft.MoveDisplayPart(r.entry.Key, part, step) {
+		m.part += step
+		m.notice = "Component order changed. Save to apply it."
+	} else {
+		m.notice = "Already at the edge of this item."
 	}
 }
 func (m *model) activate() tea.Cmd {
@@ -351,8 +470,8 @@ func (m *model) activate() tea.Cmd {
 	switch r.action {
 	case "toggle":
 		p := ""
-		if m.part > 0 {
-			p = r.entry.Parts[m.part-1]
+		if m.part >= 2 {
+			p = r.entry.Parts[m.part-2]
 		}
 		key := r.entry.Key
 		if p != "" {
@@ -364,6 +483,12 @@ func (m *model) activate() tea.Cmd {
 	case "reset":
 		m.draft.ResetMenu()
 		m.notice = "Menu items and components reset."
+	case "preset":
+		if err := m.draft.ApplyMenuPreset(r.value); err != nil {
+			m.notice = friendly(err)
+		}
+	case "new-preset":
+		return m.openInput("Save menu layout", "preset", "", "Name: a–z, 0–9 and hyphens, up to 32 characters")
 	case "theme":
 		_, err := m.draft.ApplyTheme(r.value)
 		if err != nil {
@@ -487,10 +612,19 @@ func (m *model) updateDialog(msg tea.Msg) tea.Cmd {
 				if err != nil {
 					m.notice = friendly(err)
 				}
-				m.cursors[1] = min(m.cursors[1], len(m.rows())-1)
+				m.cursors[themesSection] = min(m.cursors[themesSection], len(m.rows())-1)
+			case "delete-preset":
+				if err := m.draft.RemoveMenuPreset(d.value); err != nil {
+					m.notice = friendly(err)
+				}
+				m.cursors[presetsSection] = min(m.cursors[presetsSection], len(m.rows())-1)
 			case "overwrite":
 				_, err := m.draft.StoreTheme(d.value)
 				if err != nil {
+					m.notice = friendly(err)
+				}
+			case "overwrite-preset":
+				if _, err := m.draft.StoreMenuPreset(d.value); err != nil {
 					m.notice = friendly(err)
 				}
 			}
@@ -512,6 +646,18 @@ func (m *model) confirmInput() bool {
 		}
 		if _, exists := m.draft.Themes[name]; exists {
 			m.modal = &dialog{kind: "confirm", title: fmt.Sprintf(m.tr("Overwrite custom theme %q?"), name), action: "overwrite", value: name}
+			return false
+		}
+		m.draft = test
+	} else if d.field == "preset" {
+		test := m.draft.Clone()
+		name, err := test.StoreMenuPreset(value)
+		if err != nil {
+			d.error = friendly(err)
+			return false
+		}
+		if _, exists := m.draft.MenuPresets[name]; exists {
+			m.modal = &dialog{kind: "confirm", title: fmt.Sprintf(m.tr("Overwrite menu preset %q?"), name), action: "overwrite-preset", value: name}
 			return false
 		}
 		m.draft = test
@@ -540,6 +686,9 @@ func friendly(err error) string {
 			return "This theme name is protected. Choose a custom name."
 		}
 		return "Theme names: 1–32 letters (a–z), digits or hyphens; no leading or trailing hyphen."
+	}
+	if strings.Contains(err.Error(), "menu preset name") {
+		return "Layout names: 1–32 letters (a–z), digits or hyphens; no leading or trailing hyphen."
 	}
 	return err.Error()
 }

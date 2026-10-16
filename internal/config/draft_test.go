@@ -2,6 +2,7 @@ package config
 
 import (
 	"errors"
+	"maps"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -29,6 +30,125 @@ func TestDraftOwnsMapsAndUsesSharedRules(t *testing.T) {
 		if e.Key == "cores" && e.Group != "RESOURCES" {
 			t.Fatal("cores group")
 		}
+	}
+}
+
+func TestMenuLayoutMovesCloneAndReset(t *testing.T) {
+	c := Default()
+	if !c.MoveMenuGroup("RESOURCES", -1) || !c.MoveMenuGroup("RESOURCES", -1) {
+		t.Fatal("resources group did not move to the top")
+	}
+	if got := c.MenuLayout.Groups[0]; got != "RESOURCES" {
+		t.Fatalf("first group = %q", got)
+	}
+	if !c.MoveMenuItem("cpu", 1) || c.MenuLayout.Items["RESOURCES"][1] != "cpu" {
+		t.Fatalf("CPU did not move inside resources: %v", c.MenuLayout.Items["RESOURCES"])
+	}
+	if !c.MoveDisplayPart("cpu", "sparkline", 1) || c.MenuLayout.Components["cpu"][1] != "sparkline" {
+		t.Fatalf("sparkline did not move: %v", c.MenuLayout.Components["cpu"])
+	}
+	clone := c.Clone()
+	if !clone.MoveDisplayPart("cpu", "sparkline", 1) || reflect.DeepEqual(clone.MenuLayout, c.MenuLayout) {
+		t.Fatal("layout clone shares component slices")
+	}
+	if c.MoveMenuGroup("HEADER", -1) {
+		t.Fatal("header group moved away from its fixed title")
+	}
+	c.ResetMenu()
+	if !reflect.DeepEqual(c.MenuLayout, Default().MenuLayout) || !reflect.DeepEqual(c.Visible, Default().Visible) {
+		t.Fatal("reset did not restore visibility and ordering")
+	}
+}
+
+func TestLegacyConfigGetsDefaultMenuLayout(t *testing.T) {
+	c, err := decodeConfig([]byte(`{"animation":"shelluxdefault","style":"shelluxdefault","refresh_interval":"1s"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(c.MenuLayout, Default().MenuLayout) {
+		t.Fatalf("legacy layout = %#v", c.MenuLayout)
+	}
+	c.MenuLayout.Components["cpu"] = []string{"bar", "bar", "value", "percent", "top"}
+	if err := c.Validate(); err == nil {
+		t.Fatal("invalid component permutation accepted")
+	}
+}
+
+func TestMenuLayoutPersists(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	c := Default()
+	if !c.MoveMenuGroup("RESOURCES", -1) || !c.MoveMenuItem("cpu", 1) || !c.MoveDisplayPart("ram", "percent", -1) {
+		t.Fatal("could not prepare custom layout")
+	}
+	if _, err := writeDefault(c); err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := LoadDefault()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(loaded.MenuLayout, c.MenuLayout) {
+		t.Fatalf("layout changed while saving: %#v != %#v", loaded.MenuLayout, c.MenuLayout)
+	}
+}
+
+func TestMenuPresetsSaveApplyDeleteAndStayIndependent(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	c := Default()
+	c.Style = "neon"
+	c.RefreshInterval = "500ms"
+	if !c.MoveMenuGroup("RESOURCES", -1) || !c.MoveMenuItem("cpu", 1) || !c.MoveDisplayPart("cpu", "sparkline", 1) {
+		t.Fatal("could not prepare menu layout")
+	}
+	if err := c.ChangeDisplay("platform", "", false); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.ChangeDisplay("cpu", "sparkline", true); err != nil {
+		t.Fatal(err)
+	}
+	wantVisible := maps.Clone(c.Visible)
+	wantLayout := c.Clone().MenuLayout
+	if name, err := c.StoreMenuPreset("  Meine-Vorlage  "); err != nil || name != "meine-vorlage" {
+		t.Fatalf("store = %q, %v", name, err)
+	}
+	clone := c.Clone()
+	clone.MenuPresets["meine-vorlage"].Visible["cpu"] = false
+	if !c.MenuPresets["meine-vorlage"].Visible["cpu"] {
+		t.Fatal("preset visibility shares the cloned map")
+	}
+	clonedPreset := clone.MenuPresets["meine-vorlage"]
+	clonedPreset.Layout.Groups[0] = "SESSION"
+	if c.MenuPresets["meine-vorlage"].Layout.Groups[0] != "SYSTEM" {
+		t.Fatal("preset order shares the cloned slice")
+	}
+	c.ResetMenu()
+	if len(c.MenuPresets) != 1 || c.Style != "neon" {
+		t.Fatal("reset deleted a saved preset or changed appearance")
+	}
+	if err := c.ApplyMenuPreset("meine-vorlage"); err != nil {
+		t.Fatal(err)
+	}
+	if !maps.Equal(c.Visible, wantVisible) || !reflect.DeepEqual(c.MenuLayout, wantLayout) || c.Style != "neon" || c.RefreshInterval != "500ms" {
+		t.Fatal("applying the preset changed an unrelated setting or lost menu choices")
+	}
+	if _, err := writeDefault(c); err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := LoadDefault()
+	if err != nil || !loaded.MenuPresetMatches("meine-vorlage") {
+		t.Fatalf("preset not persisted: %v", err)
+	}
+	if err := loaded.ApplyMenuPreset("default"); err != nil || !loaded.MenuPresetMatches("default") || len(loaded.MenuPresets) != 1 {
+		t.Fatal("default layout removed saved presets")
+	}
+	if err := loaded.RemoveMenuPreset("meine-vorlage"); err != nil || len(loaded.MenuPresets) != 0 || loaded.Style != "neon" {
+		t.Fatal("delete changed appearance or retained the preset")
+	}
+	if _, err := loaded.StoreMenuPreset("default"); err == nil {
+		t.Fatal("reserved preset name accepted")
+	}
+	if err := loaded.RemoveMenuPreset("default"); err == nil {
+		t.Fatal("built-in default preset deleted")
 	}
 }
 

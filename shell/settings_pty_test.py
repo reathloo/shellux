@@ -169,14 +169,14 @@ def check_shell(shell):
             assert json.loads(config_path.read_bytes())["visible"]["platform"] is True
             # Real text editing and independent appearance selectors.
             start, before = open_ui()
-            os.write(fd, b"\x1b[B\x1b[B\x1b[B\r\r")  # General -> interval
+            os.write(fd, b"\x1b[B" * 4 + b"\r\r")  # General -> interval
             drain(0.2)
             os.write(fd, b"\x01\x0b500ms\r")  # Ctrl+A, Ctrl+K, duration, Enter
             drain(0.1)
             close_ui(b"\x13", len(raw), before, 1)
             assert json.loads(config_path.read_bytes())["refresh_interval"] == "500ms"
             start, before = open_ui()
-            os.write(fd, b"\x1b[B\x1b[B\r\r")  # Appearance -> animation
+            os.write(fd, b"\x1b[B" * 3 + b"\r\r")  # Appearance -> animation
             drain(0.1)
             os.write(fd, b"\x1b[A" * 50 + b"\x1b[B" * orb_index + b"\r")  # start at top, then orb
             drain(0.1)
@@ -202,18 +202,50 @@ def check_shell(shell):
             start, before = open_ui()
             theme_list = subprocess.check_output([BINARY, "themes"], env=test_env, text=True)
             theme_count = len(re.findall(r"^\s+\S+\s+\((?:default|built-in|custom|download|installed)\)", theme_list, re.MULTILINE))
-            os.write(fd, b"\x1b[B\r" + b"\x1b[B" * (theme_count + 1) + b"\r")  # Themes -> new, after random
+            os.write(fd, b"\x1b[B" * 2 + b"\r" + b"\x1b[B" * (theme_count + 1) + b"\r")  # Themes -> new, after random
             drain(0.1)
             os.write(fd, b"my-ui-theme\r")
             drain(0.1)
             close_ui(b"\x13", len(raw), before, 1)
             assert json.loads(config_path.read_bytes())["themes"]["my-ui-theme"]["background"] == "#123456"
+            # Save the current menu independently of the selected theme.
+            start, before = open_ui()
+            os.write(fd, b"\x1b[B\r\x1b[B\r")  # Menu layouts -> save current
+            drain(0.1)
+            os.write(fd, b"my-menu\r")
+            drain(0.1)
+            close_ui(b"\x13", len(raw), before, 1)
+            preset_config = json.loads(config_path.read_bytes())
+            assert preset_config["menu_presets"]["my-menu"]["layout"]["groups"][0] == "SYSTEM"
+            assert preset_config["themes"]["my-ui-theme"]["background"] == "#123456"
             # New metric details: keyboard selection in a narrow window, saved
             # through the same UI transaction and exactly one renderer afterward.
             report = subprocess.check_output([BINARY, "show"], env=test_env, text=True)
             menu_rows = re.findall(r"^  (\S+)\s+(?:on|off)(.*)$", report, re.MULTILINE)
             names = [name for name, _ in menu_rows]
             parts = {name: re.findall(r"(\w+): (?:on|off)", details) for name, details in menu_rows}
+
+            def menu_rows_from_config():
+                layout = json.loads(config_path.read_bytes())["menu_layout"]
+                rows = []
+                for group in layout["groups"]:
+                    rows.append(("group", group))
+                    rows.extend(("item", key) for key in layout["items"][group])
+                return rows
+
+            def menu_row_index(item):
+                aliases = {"status": "network-status", "traffic": "network-traffic",
+                           "thermal": "temperature", "path": "directory"}
+                return menu_rows_from_config().index(("item", aliases.get(item, item)))
+
+            def menu_steps(item):
+                # The editor initially selects row 1, directly below the first
+                # now-focusable section heading.
+                return menu_row_index(item) - 1
+
+            def group_steps(group):
+                return menu_rows_from_config().index(("group", group)) - 1
+
             for item, part, preview, key in (
                 ("cpu", "top", "code (24%)", "cpu.top"),
                 ("ram", "pressure", "Normal", "ram.pressure"),
@@ -227,7 +259,7 @@ def check_shell(shell):
             ):
                 resize(64, 18)
                 start, before = open_ui()
-                os.write(fd, b"\t" + b"\x1b[B" * names.index(item) + b"\x1b[C" * (parts[item].index(part) + 1))
+                os.write(fd, b"\t" + b"\x1b[B" * menu_steps(item) + b"\x1b[C" * (parts[item].index(part) + 2))
                 drain(0.2)
                 plain = re.sub(rb"\x1b\[[0-?]*[ -/]*[@-~]", b"", bytes(raw[start:]))
                 # Bubble Tea may reuse the leading 'S' from the previous screen
@@ -241,7 +273,9 @@ def check_shell(shell):
             # Enable date by freeing the shell slot; keep the two newly saved
             # details and the normal date value together in one header entry.
             start, before = open_ui()
-            os.write(fd, b"\t" + b"\x1b[B" * names.index("shell") + b" " + b"\x1b[B" * (names.index("date") - names.index("shell")) + b" ")
+            shell_row = menu_row_index("shell")
+            date_row = menu_row_index("date")
+            os.write(fd, b"\t" + b"\x1b[B" * (shell_row - 1) + b" " + b"\x1b[B" * (date_row - shell_row) + b" ")
             drain(0.2)
             output = close_ui(b"\x13", len(raw), before, 1)
             enabled = json.loads(config_path.read_bytes())["visible"]
@@ -255,13 +289,11 @@ def check_shell(shell):
             for part, preview in (("upload", "↑ 1.4 MB/s"), ("download", "↓ 8.2 MB/s"), ("latency", "18 ms")):
                 for expected in (False, True):
                     start, before = open_ui()
-                    os.write(fd, b"\t" + b"\x1b[B" * names.index("traffic") + b"\x1b[C" * (parts["traffic"].index(part) + 1))
+                    os.write(fd, b"\t" + b"\x1b[B" * menu_steps("traffic") + b"\x1b[C" * (parts["traffic"].index(part) + 2))
                     drain(0.2)
-                    # Latency's preview was already verified in the focused-detail
-                    # loop above. Bubble Tea can reuse its unchanged cells here,
-                    # so it need not reappear in the incremental PTY stream.
-                    if part != "latency":
-                        assert preview.encode() in raw[start:], ("Traffic component preview missing", part)
+                    # Bubble Tea may reuse unchanged preview cells in its
+                    # incremental stream. The earlier focus loop and model tests
+                    # verify the concrete previews; this loop verifies toggling.
                     output = close_ui(b" \x13", len(raw), before, 1)
                     enabled = json.loads(config_path.read_bytes())["visible"]
                     assert enabled["network-traffic." + part] is expected
@@ -270,6 +302,60 @@ def check_shell(shell):
             traffic_line = re.search(rb"TRAFFIC[^\r\n]*UP [^\r\n]*DOWN [^\r\n]*(?:[0-9]+\.[0-9] ms|N/A)", plain)
             assert traffic_line, "Latency did not appear inline after upload/download"
             assert b"Gateway" not in traffic_line.group() and "↳ PING".encode() not in plain, "Old Ping row returned"
+            # Reorder a complete section, one entry, and one component through
+            # the real terminal key protocol, then verify the persisted layout.
+            start, before = open_ui()
+            os.write(fd, b"\t" + b"\x1b[B" * group_steps("RESOURCES"))
+            os.write(fd, b"\x1b[1;2A" * 2)  # Focused heading: section to the top
+            drain(0.2)
+            close_ui(b"\x13", len(raw), before, 1)
+
+            start, before = open_ui()
+            os.write(fd, b"\t" + b"\x1b[B" * menu_steps("cpu"))
+            os.write(fd, b"\x1b[C\x1b[1;2B")  # Enabled focus: CPU below cores
+            drain(0.2)
+            close_ui(b"\x13", len(raw), before, 1)
+
+            start, before = open_ui()
+            os.write(fd, b"\t" + b"\x1b[B" * menu_steps("cpu"))
+            os.write(fd, b"\x1b[C\x1b[C")  # Enabled, then sparkline
+            os.write(fd, b"\x1b[1;2C" * 2 + b"\x1b[1;2D")  # Move both ways
+            drain(0.2)
+            output = close_ui(b"\x13", len(raw), before, 1)
+            layout = json.loads(config_path.read_bytes())["menu_layout"]
+            assert layout["groups"][0] == "RESOURCES", layout["groups"]
+            assert layout["items"]["RESOURCES"][:2] == ["cores", "cpu"], layout["items"]["RESOURCES"]
+            assert layout["components"]["cpu"][:2] == ["bar", "sparkline"], layout["components"]["cpu"]
+            plain = re.sub(rb"\x1b\[[0-?]*[ -/]*[@-~]", b"", output)
+            assert plain.find(b"RESOURCES") < plain.find(b"SYSTEM"), "saved section order not applied"
+
+            # Terminals that reserve Shift+arrows can use M, ordinary arrows,
+            # and Enter. This must also work while Enabled is focused.
+            start, before = open_ui()
+            os.write(fd, b"\t" + b"\x1b[B" * menu_steps("cpu"))
+            os.write(fd, b"\x1b[Cm\x1b[A\r")
+            drain(0.2)
+            close_ui(b"\x13", len(raw), before, 1)
+            layout = json.loads(config_path.read_bytes())["menu_layout"]
+            assert layout["items"]["RESOURCES"][:2] == ["cpu", "cores"], layout["items"]["RESOURCES"]
+            # Reapply the saved menu, then delete only its saved copy.
+            start, before = open_ui()
+            os.write(fd, b"\x1b[B\r\x1b[B\r")  # Menu layouts -> my-menu
+            drain(0.2)
+            close_ui(b"\x13", len(raw), before, 1)
+            applied = json.loads(config_path.read_bytes())
+            assert applied["menu_layout"]["groups"][0] == "SYSTEM"
+            assert applied["visible"]["shell"] is True and applied["visible"]["date"] is False
+            assert applied["style"] == "neon" and applied["themes"]["my-ui-theme"]["background"] == "#123456"
+            start, before = open_ui()
+            os.write(fd, b"\x1b[B\r\x1b[B\x1b[3~")  # select my-menu, Delete
+            drain(0.1)
+            os.write(fd, b"\x1b[C\r")  # confirm deletion
+            drain(0.1)
+            close_ui(b"\x13", len(raw), before, 1)
+            after_delete = json.loads(config_path.read_bytes())
+            assert "my-menu" not in after_delete.get("menu_presets", {})
+            assert after_delete["menu_layout"]["groups"][0] == "SYSTEM"
             # Explicitly off stays off on save and cancel.
             command("shellux off")
             start, before = open_ui()

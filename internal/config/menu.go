@@ -1,6 +1,10 @@
 package config
 
-import "fmt"
+import (
+	"fmt"
+	"maps"
+	"slices"
+)
 
 // menuItems is the single source of menu names, public labels and defaults.
 var menuItems = []struct {
@@ -25,6 +29,123 @@ var menuItems = []struct {
 	{"spotify", "spotify", "SESSION", true, false},
 	{"progress", "progress", "SESSION", true, false},
 	{"time", "time", "HEADER", true, false},
+}
+
+// MenuLayout stores the independent order of dashboard groups, their entries,
+// and the components inside each entry. Visibility stays separate so moving a
+// disabled control does not silently enable it.
+type MenuLayout struct {
+	Groups     []string            `json:"groups"`
+	Items      map[string][]string `json:"items"`
+	Components map[string][]string `json:"components"`
+}
+
+func defaultMenuLayout() MenuLayout {
+	layout := MenuLayout{Items: map[string][]string{}, Components: map[string][]string{}}
+	for _, item := range menuItems {
+		if !slices.Contains(layout.Groups, item.group) {
+			layout.Groups = append(layout.Groups, item.group)
+		}
+		layout.Items[item.group] = append(layout.Items[item.group], item.name)
+		if parts := defaultComponentOrder(item.name); len(parts) > 0 {
+			layout.Components[item.name] = parts
+		}
+	}
+	return layout
+}
+
+func defaultComponentOrder(name string) []string {
+	switch canonicalMenuItem(name) {
+	case "cpu":
+		return []string{"sparkline", "bar", "value", "percent", "top"}
+	case "ram":
+		return []string{"sparkline", "bar", "value", "percent", "pressure"}
+	case "battery":
+		return []string{"sparkline", "bar", "percent", "value", "remaining"}
+	case "network-traffic":
+		return []string{"sparkline", "upload", "download", "latency"}
+	case "network-status":
+		return []string{"value", "connection", "name", "interface", "ip"}
+	case "cores", "volume":
+		return []string{"bar", "value", "percent"}
+	default:
+		return DisplayParts(name)
+	}
+}
+
+func cloneStringSlices(source map[string][]string) map[string][]string {
+	if source == nil {
+		return nil
+	}
+	result := maps.Clone(source)
+	for key, values := range result {
+		result[key] = append([]string(nil), values...)
+	}
+	return result
+}
+
+// completeMenuLayout migrates configurations written before ordering existed
+// and fills fields added by newer Shellux versions without changing old choices.
+func completeMenuLayout(layout MenuLayout) MenuLayout {
+	layout.Groups = append([]string(nil), layout.Groups...)
+	layout.Items = cloneStringSlices(layout.Items)
+	layout.Components = cloneStringSlices(layout.Components)
+	defaults := defaultMenuLayout()
+	if len(layout.Groups) == 0 {
+		layout.Groups = defaults.Groups
+	}
+	if layout.Items == nil {
+		layout.Items = map[string][]string{}
+	}
+	for group, items := range defaults.Items {
+		if len(layout.Items[group]) == 0 {
+			layout.Items[group] = items
+		}
+	}
+	if layout.Components == nil {
+		layout.Components = map[string][]string{}
+	}
+	for entry, parts := range defaults.Components {
+		if len(layout.Components[entry]) == 0 {
+			layout.Components[entry] = parts
+		}
+	}
+	return layout
+}
+
+func validatePermutation(label string, got, want []string) error {
+	if len(got) != len(want) {
+		return fmt.Errorf("%s must contain every supported value exactly once", label)
+	}
+	seen := map[string]bool{}
+	for _, value := range got {
+		if seen[value] || !slices.Contains(want, value) {
+			return fmt.Errorf("%s contains invalid or duplicate value %q", label, value)
+		}
+		seen[value] = true
+	}
+	return nil
+}
+
+func validateMenuLayout(layout MenuLayout) error {
+	defaults := defaultMenuLayout()
+	if err := validatePermutation("menu groups", layout.Groups, defaults.Groups); err != nil {
+		return err
+	}
+	if len(layout.Items) != len(defaults.Items) || len(layout.Components) != len(defaults.Components) {
+		return fmt.Errorf("menu layout contains unsupported entries")
+	}
+	for group, want := range defaults.Items {
+		if err := validatePermutation("menu group "+group, layout.Items[group], want); err != nil {
+			return err
+		}
+	}
+	for entry, want := range defaults.Components {
+		if err := validatePermutation("components for "+entry, layout.Components[entry], want); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // MenuItems returns supported config keys in display order.
@@ -266,11 +387,82 @@ type MenuEntry struct {
 }
 
 func MenuEntries() []MenuEntry {
+	return Default().OrderedMenuEntries()
+}
+
+// OrderedMenuEntries returns display metadata in the user's saved group, entry,
+// and component order.
+func (c Config) OrderedMenuEntries() []MenuEntry {
+	layout := completeMenuLayout(c.MenuLayout)
 	entries := make([]MenuEntry, 0, len(menuItems))
-	for _, item := range menuItems {
-		entries = append(entries, MenuEntry{item.name, item.display, item.group, DisplayParts(item.name)})
+	for _, group := range layout.Groups {
+		for _, name := range layout.Items[group] {
+			entries = append(entries, MenuEntry{name, DisplayMenuItem(name), group, append([]string(nil), layout.Components[name]...)})
+		}
 	}
 	return entries
 }
 
-func (c *Config) ResetMenu() { c.Visible = defaultVisibility() }
+func moveValue(values []string, value string, step int) bool {
+	index := slices.Index(values, value)
+	target := index + step
+	if index < 0 || target < 0 || target >= len(values) {
+		return false
+	}
+	values[index], values[target] = values[target], values[index]
+	return true
+}
+
+// MoveMenuGroup moves a complete dashboard section. HEADER remains pinned
+// because its clock is part of the title rather than a dashboard section.
+func (c *Config) MoveMenuGroup(group string, step int) bool {
+	if group == "HEADER" || step == 0 {
+		return false
+	}
+	next := c.Clone()
+	next.MenuLayout = completeMenuLayout(next.MenuLayout)
+	index := slices.Index(next.MenuLayout.Groups, group)
+	target := index + step
+	if index < 0 || target < 0 || target >= len(next.MenuLayout.Groups) || next.MenuLayout.Groups[target] == "HEADER" {
+		return false
+	}
+	if !moveValue(next.MenuLayout.Groups, group, step) {
+		return false
+	}
+	*c = next
+	return true
+}
+
+// MoveMenuItem moves an entry inside its current group.
+func (c *Config) MoveMenuItem(name string, step int) bool {
+	name = canonicalMenuItem(name)
+	next := c.Clone()
+	next.MenuLayout = completeMenuLayout(next.MenuLayout)
+	for group, items := range next.MenuLayout.Items {
+		if moveValue(items, name, step) {
+			next.MenuLayout.Items[group] = items
+			*c = next
+			return true
+		}
+	}
+	return false
+}
+
+// MoveDisplayPart moves one component inside a single entry.
+func (c *Config) MoveDisplayPart(name, part string, step int) bool {
+	name = canonicalMenuItem(name)
+	next := c.Clone()
+	next.MenuLayout = completeMenuLayout(next.MenuLayout)
+	parts := next.MenuLayout.Components[name]
+	if !moveValue(parts, part, step) {
+		return false
+	}
+	next.MenuLayout.Components[name] = parts
+	*c = next
+	return true
+}
+
+func (c *Config) ResetMenu() {
+	c.Visible = defaultVisibility()
+	c.MenuLayout = defaultMenuLayout()
+}

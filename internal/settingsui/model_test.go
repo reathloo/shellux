@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
@@ -30,6 +31,24 @@ func press(m *model, key string) {
 	case "shift+tab":
 		k.Code = tea.KeyTab
 		k.Mod = tea.ModShift
+	case "shift+up":
+		k.Code = tea.KeyUp
+		k.Mod = tea.ModShift
+	case "shift+down":
+		k.Code = tea.KeyDown
+		k.Mod = tea.ModShift
+	case "shift+left":
+		k.Code = tea.KeyLeft
+		k.Mod = tea.ModShift
+	case "shift+right":
+		k.Code = tea.KeyRight
+		k.Mod = tea.ModShift
+	case "ctrl+up":
+		k.Code = tea.KeyUp
+		k.Mod = tea.ModCtrl
+	case "ctrl+down":
+		k.Code = tea.KeyDown
+		k.Mod = tea.ModCtrl
 	case "enter":
 		k.Code = tea.KeyEnter
 	case "esc":
@@ -80,24 +99,24 @@ func TestKeyboardNavigationAndDraftSwitches(t *testing.T) {
 		t.Fatal("back tab")
 	}
 	press(m, "down")
-	if m.section != 1 {
+	if m.section != presetsSection {
 		t.Fatal("navigation")
 	}
 	press(m, "up")
 	chooseRow(t, m, "toggle", "cpu")
-	press(m, "right")
+	m.part = slices.Index(m.selectedRow().entry.Parts, "bar") + 2
 	press(m, "space")
 	if config.Shown(m.draft.Visible, "cpu.bar") || !config.Shown(m.draft.Visible, "cpu.percent") {
 		t.Fatal("component focus")
 	}
-	press(m, "right")
+	m.part = slices.Index(m.selectedRow().entry.Parts, "percent") + 2
 	press(m, "space")
-	press(m, "right")
+	m.part = slices.Index(m.selectedRow().entry.Parts, "value") + 2
 	press(m, "space")
 	if config.EntryShown(m.draft.Visible, "cpu") || !strings.Contains(m.menuHelp("cpu", "value"), "one-minute CPU load") {
 		t.Fatal("component help or hidden state is incorrect")
 	}
-	m.part = 0
+	m.part = 1
 	press(m, "space")
 	press(m, "space")
 	if config.Shown(m.draft.Visible, "cpu.bar") {
@@ -122,17 +141,100 @@ func TestKeyboardNavigationAndDraftSwitches(t *testing.T) {
 	}
 }
 
+func TestKeyboardReordersGroupsItemsAndComponents(t *testing.T) {
+	m := newModel(config.Default(), func(config.Config) error { return nil })
+	m.focus = 1
+	chooseRow(t, m, "group", "RESOURCES")
+	press(m, "shift+up")
+	press(m, "shift+up")
+	if m.draft.MenuLayout.Groups[0] != "RESOURCES" || m.selectedRow().value != "RESOURCES" {
+		t.Fatalf("group move failed: %v", m.draft.MenuLayout.Groups)
+	}
+	chooseRow(t, m, "toggle", "cpu")
+	press(m, "shift+down")
+	if m.draft.MenuLayout.Items["RESOURCES"][1] != "cpu" || m.selectedRow().entry.Key != "cpu" {
+		t.Fatalf("item move failed: %v", m.draft.MenuLayout.Items["RESOURCES"])
+	}
+	m.part = slices.Index(m.selectedRow().entry.Parts, "sparkline") + 2
+	press(m, "shift+right")
+	press(m, "shift+right")
+	press(m, "shift+left")
+	if m.draft.MenuLayout.Components["cpu"][1] != "sparkline" || m.part != 3 {
+		t.Fatalf("component move failed: %v, focus %d", m.draft.MenuLayout.Components["cpu"], m.part)
+	}
+	if !strings.Contains(m.notice, "Save") {
+		t.Fatal("reorder lacks save notice")
+	}
+	chooseRow(t, m, "reset", "")
+	press(m, "enter")
+	if !reflect.DeepEqual(m.draft.MenuLayout, config.Default().MenuLayout) {
+		t.Fatal("settings reset did not restore layout")
+	}
+}
+
+func TestItemMoveWorksFromSwitchFocusAndWithoutShift(t *testing.T) {
+	m := newModel(config.Default(), func(config.Config) error { return nil })
+	chooseRow(t, m, "toggle", "cpu")
+	m.part = 1 // Enabled, not the item name
+	press(m, "shift+down")
+	if got := m.draft.MenuLayout.Items["RESOURCES"][:2]; !slices.Equal(got, []string{"cores", "cpu"}) {
+		t.Fatalf("Shift+Down on Enabled did not move CPU: %v", got)
+	}
+	m.part = 2 // first detail switch
+	press(m, "shift+up")
+	if got := m.draft.MenuLayout.Items["RESOURCES"][:2]; !slices.Equal(got, []string{"cpu", "cores"}) {
+		t.Fatalf("Shift+Up on a detail did not move CPU: %v", got)
+	}
+	press(m, "m")
+	if !m.moveMode {
+		t.Fatal("move mode did not open")
+	}
+	press(m, "down")
+	if got := m.draft.MenuLayout.Items["RESOURCES"][:2]; !slices.Equal(got, []string{"cores", "cpu"}) {
+		t.Fatalf("ordinary Down in move mode did not move CPU: %v", got)
+	}
+	press(m, "right")
+	if got := m.draft.MenuLayout.Components["cpu"][:2]; !slices.Equal(got, []string{"bar", "sparkline"}) {
+		t.Fatalf("ordinary Right in move mode did not move sparkline: %v", got)
+	}
+	press(m, "enter")
+	if m.moveMode || m.done {
+		t.Fatal("Enter did not leave move mode without closing settings")
+	}
+}
+
+func TestEveryComponentCanMoveInBothDirections(t *testing.T) {
+	for _, entry := range config.MenuEntries() {
+		if len(entry.Parts) < 2 {
+			continue
+		}
+		for index, part := range entry.Parts {
+			m := newModel(config.Default(), func(config.Config) error { return nil })
+			chooseRow(t, m, "toggle", entry.Key)
+			m.part = index + 2
+			if index < len(entry.Parts)-1 {
+				press(m, "shift+right")
+				press(m, "shift+left")
+			} else {
+				press(m, "shift+left")
+				press(m, "shift+right")
+			}
+			if !slices.Equal(m.draft.MenuLayout.Components[entry.Key], entry.Parts) || m.part != index+2 {
+				t.Fatalf("%s.%s did not move both ways: %v, focus %d", entry.Key, part, m.draft.MenuLayout.Components[entry.Key], m.part)
+			}
+		}
+	}
+}
+
 func TestAllNewComponentControlsRemainFocusable(t *testing.T) {
 	for _, size := range [][2]int{{64, 18}, {80, 24}, {96, 30}} {
 		m := newModel(config.Default(), func(config.Config) error { return nil })
 		m.Update(tea.WindowSizeMsg{Width: size[0], Height: size[1]})
 		for _, name := range []string{"cpu", "ram", "battery", "network-status", "network-traffic", "date"} {
 			chooseRow(t, m, "toggle", name)
-			for i, part := range config.DisplayParts(name) {
-				press(m, "right")
-				if m.part != i+1 {
-					t.Fatal("component skipped")
-				}
+			ordered := append([]string(nil), m.selectedRow().entry.Parts...)
+			for i, part := range ordered {
+				m.part = i + 2
 				before := config.Shown(m.draft.Visible, name+"."+part)
 				press(m, "space")
 				if config.Shown(m.draft.Visible, name+"."+part) == before {
@@ -145,6 +247,7 @@ func TestAllNewComponentControlsRemainFocusable(t *testing.T) {
 				checkBounds(t, m, size)
 				press(m, "space")
 			}
+			m.part = len(ordered) + 1
 			press(m, "right")
 			if m.part != 0 {
 				t.Fatal("component focus did not wrap")
@@ -222,7 +325,7 @@ func TestComponentControlsShowOutputPreviews(t *testing.T) {
 
 func TestEveryEntryShowsAnOutputPreview(t *testing.T) {
 	m := newModel(config.Default(), func(config.Config) error { return nil })
-	m.Update(tea.WindowSizeMsg{Width: 64, Height: 18})
+	m.Update(tea.WindowSizeMsg{Width: 120, Height: 30})
 	seen := map[string]string{}
 	for _, entry := range config.MenuEntries() {
 		preview := m.entryPreview(entry.Key)
@@ -234,8 +337,12 @@ func TestEveryEntryShowsAnOutputPreview(t *testing.T) {
 		}
 		seen[preview] = entry.Key
 		chooseRow(t, m, "toggle", entry.Key)
-		if view := ansi.Strip(m.View().Content); !strings.Contains(view, preview) {
-			t.Fatalf("%s preview is clipped in a narrow window: %s", entry.Key, view)
+		view := ansi.Strip(m.View().Content)
+		if len(entry.Parts) == 0 && !strings.Contains(view, preview) {
+			t.Fatalf("%s has no detail switches, but its preview is missing: %s", entry.Key, view)
+		}
+		if len(entry.Parts) > 0 && strings.Contains(view, "Enabled · "+preview) {
+			t.Fatalf("%s repeats its preview before the detail switches: %s", entry.Key, view)
 		}
 		for _, part := range entry.Parts {
 			partPreview := m.componentPreview(entry.Key, part)
@@ -247,8 +354,16 @@ func TestEveryEntryShowsAnOutputPreview(t *testing.T) {
 
 	chooseRow(t, m, "toggle", "uptime")
 	view := ansi.Strip(m.View().Content)
-	if !strings.Contains(view, "[✓] 2h 5m") || strings.Contains(view, "[✓] Enabled") {
+	if !strings.Contains(view, "[✓] Enabled · 2h 5m") {
 		t.Fatalf("entry preview is not rendered as its switch label: %s", view)
+	}
+	m.draft.Language = "de"
+	if view := ansi.Strip(m.View().Content); !strings.Contains(view, "[✓] Aktiviert · 2h 5m") {
+		t.Fatalf("German master switch is missing: %s", view)
+	}
+	chooseRow(t, m, "toggle", "cpu")
+	if view := ansi.Strip(m.View().Content); !strings.Contains(view, "[✓] Aktiviert") || strings.Contains(view, "Aktiviert · ████░░░░ 42%") {
+		t.Fatalf("resource master switch still repeats its preview: %s", view)
 	}
 }
 
@@ -262,11 +377,12 @@ func TestHelpTextFollowsFocusedControl(t *testing.T) {
 		t.Fatalf("CPU entry help is not visible: %s", view)
 	}
 	press(m, "right")
+	m.part = slices.Index(m.selectedRow().entry.Parts, "bar") + 2
 	barHelp := m.menuHelp("cpu", "bar")
 	if view := ansi.Strip(m.View().Content); !strings.Contains(view, barHelp) || strings.Contains(view, entryHelp) {
 		t.Fatalf("help did not follow bar focus: %s", view)
 	}
-	press(m, "right")
+	m.part = slices.Index(m.selectedRow().entry.Parts, "percent") + 2
 	percentHelp := m.menuHelp("cpu", "percent")
 	if view := ansi.Strip(m.View().Content); !strings.Contains(view, percentHelp) || strings.Contains(view, barHelp) {
 		t.Fatalf("help did not follow percent focus: %s", view)
@@ -332,7 +448,7 @@ func TestDirtyCancelDefaultAndInterrupt(t *testing.T) {
 func TestSelectionInputAndSaveFailure(t *testing.T) {
 	saves := 0
 	m := newModel(config.Default(), func(config.Config) error { saves++; return config.ErrChanged })
-	m.section = 2
+	m.section = appearanceSection
 	chooseRow(t, m, "style", "")
 	press(m, "enter")
 	if m.modal == nil || m.modal.kind != "select" {
@@ -361,7 +477,7 @@ func TestSelectionInputAndSaveFailure(t *testing.T) {
 	if m.draft.Background != "#123456" {
 		t.Fatal("RGB input")
 	}
-	m.section = 3
+	m.section = generalSection
 	chooseRow(t, m, "interval", "")
 	press(m, "enter")
 	m.modal.input.SetValue("0s")
@@ -396,7 +512,7 @@ func TestSelectionInputAndSaveFailure(t *testing.T) {
 
 func TestOwnThemeDialogsProtectAndDeferChanges(t *testing.T) {
 	m := newModel(config.Default(), func(config.Config) error { return nil })
-	m.section = 1
+	m.section = themesSection
 	chooseRow(t, m, "new", "")
 	press(m, "enter")
 	m.modal.input.SetValue("purplemonster")
@@ -445,6 +561,64 @@ func TestOwnThemeDialogsProtectAndDeferChanges(t *testing.T) {
 	}
 }
 
+func TestMenuPresetDialogsAndDraftSelection(t *testing.T) {
+	var saved config.Config
+	saves := 0
+	m := newModel(config.Default(), func(c config.Config) error { saved = c; saves++; return nil })
+	m.section = presetsSection
+	chooseRow(t, m, "new-preset", "")
+	press(m, "enter")
+	m.modal.input.SetValue("work")
+	press(m, "enter")
+	if len(m.draft.MenuPresets) != 1 || saves != 0 || m.original.MenuPresets != nil {
+		t.Fatal("preset creation wrote outside the draft")
+	}
+	m.section = menuSection
+	chooseRow(t, m, "toggle", "cpu")
+	press(m, "shift+down")
+	m.section = presetsSection
+	chooseRow(t, m, "new-preset", "")
+	press(m, "enter")
+	m.modal.input.SetValue("work")
+	press(m, "enter")
+	if m.modal == nil || m.modal.kind != "confirm" || m.draft.MenuPresets["work"].Layout.Items["RESOURCES"][0] != "cpu" {
+		t.Fatal("preset overwritten without confirmation")
+	}
+	press(m, "right")
+	press(m, "enter")
+	if m.draft.MenuPresets["work"].Layout.Items["RESOURCES"][0] != "cores" {
+		t.Fatal("confirmed preset overwrite did not store current order")
+	}
+	m.draft.Style = "neon"
+	chooseRow(t, m, "preset", "default")
+	press(m, "enter")
+	if !m.draft.MenuPresetMatches("default") || m.draft.Style != "neon" {
+		t.Fatal("default preset changed theme")
+	}
+	chooseRow(t, m, "preset", "work")
+	press(m, "enter")
+	if !m.draft.MenuPresetMatches("work") || m.draft.Style != "neon" {
+		t.Fatal("saved preset did not apply independently")
+	}
+	press(m, "ctrl+s")
+	if saves != 1 || saved.MenuPresets["work"].Layout.Items["RESOURCES"][0] != "cores" {
+		t.Fatal("preset was not saved with the menu")
+	}
+
+	m = newModel(saved, func(c config.Config) error { saved = c; return nil })
+	m.section = presetsSection
+	chooseRow(t, m, "preset", "work")
+	press(m, "delete")
+	if m.modal == nil || len(m.draft.MenuPresets) != 1 {
+		t.Fatal("preset deletion skipped confirmation")
+	}
+	press(m, "right")
+	press(m, "enter")
+	if len(m.draft.MenuPresets) != 0 || m.draft.MenuLayout.Items["RESOURCES"][0] != "cores" || m.draft.Style != "neon" {
+		t.Fatal("preset deletion changed active settings")
+	}
+}
+
 func TestViewBoundsScrollAndFocus(t *testing.T) {
 	m := newModel(config.Default(), func(config.Config) error { return nil })
 	for i := range 40 {
@@ -452,7 +626,7 @@ func TestViewBoundsScrollAndFocus(t *testing.T) {
 	}
 	for _, size := range [][2]int{{140, 40}, {96, 30}, {64, 18}, {63, 17}, {30, 8}, {1, 1}} {
 		m.Update(tea.WindowSizeMsg{Width: size[0], Height: size[1]})
-		for section := range 4 {
+		for section := range sectionCount {
 			m.section = section
 			m.focus = 1
 			m.cursors[section] = len(m.rows()) - 1
@@ -461,7 +635,7 @@ func TestViewBoundsScrollAndFocus(t *testing.T) {
 				t.Fatalf("selected row invisible at %v section %d", size, section)
 			}
 		}
-		m.section = 2
+		m.section = appearanceSection
 		chooseRow(t, m, "background", "")
 		press(m, "enter")
 		if m.modal != nil {

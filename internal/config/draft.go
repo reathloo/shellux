@@ -16,6 +16,16 @@ func (c Config) Clone() Config {
 		c.Visible = defaultVisibility()
 	}
 	c.Themes = maps.Clone(c.Themes)
+	c.MenuLayout.Groups = append([]string(nil), c.MenuLayout.Groups...)
+	c.MenuLayout.Items = cloneStringSlices(c.MenuLayout.Items)
+	c.MenuLayout.Components = cloneStringSlices(c.MenuLayout.Components)
+	if c.MenuPresets != nil {
+		presets := make(map[string]SavedMenuPreset, len(c.MenuPresets))
+		for name, preset := range c.MenuPresets {
+			presets[name] = cloneSavedMenuPreset(preset)
+		}
+		c.MenuPresets = presets
+	}
 	return c
 }
 

@@ -55,7 +55,7 @@ func TestStyleAndThemeSelectionRecolorsWithoutSaving(t *testing.T) {
 	saves := 0
 	m := newModel(c, func(config.Config) error { saves++; return nil })
 	before := m.View().Content
-	m.section = 2
+	m.section = appearanceSection
 	chooseRow(t, m, "style", "")
 	press(m, "enter")
 	for i, choice := range m.modal.choices {
@@ -68,7 +68,7 @@ func TestStyleAndThemeSelectionRecolorsWithoutSaving(t *testing.T) {
 	if !sameColor(m.styles().border, neon.MutedColor) || m.View().Content == before {
 		t.Fatal("style did not change immediately")
 	}
-	m.section = 1
+	m.section = themesSection
 	chooseRow(t, m, "theme", "orangedragon")
 	press(m, "enter")
 	orangedragon, _ := theme.ByName("orangedragon")

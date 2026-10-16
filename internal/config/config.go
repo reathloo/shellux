@@ -47,13 +47,15 @@ func availableThemes() map[string]SavedTheme {
 
 // Config contains the user-facing Shellux settings.
 type Config struct {
-	Language        string                `json:"language,omitempty"`
-	Background      string                `json:"background,omitempty"`
-	Animation       string                `json:"animation"`
-	Style           string                `json:"style"`
-	RefreshInterval string                `json:"refresh_interval"`
-	Visible         map[string]bool       `json:"visible"`
-	Themes          map[string]SavedTheme `json:"themes,omitempty"`
+	Language        string                     `json:"language,omitempty"`
+	Background      string                     `json:"background,omitempty"`
+	Animation       string                     `json:"animation"`
+	Style           string                     `json:"style"`
+	RefreshInterval string                     `json:"refresh_interval"`
+	Visible         map[string]bool            `json:"visible"`
+	MenuLayout      MenuLayout                 `json:"menu_layout"`
+	MenuPresets     map[string]SavedMenuPreset `json:"menu_presets,omitempty"`
+	Themes          map[string]SavedTheme      `json:"themes,omitempty"`
 }
 
 func Default() Config {
@@ -65,6 +67,7 @@ func Default() Config {
 		Style:           base.Style,
 		RefreshInterval: "1s",
 		Visible:         defaultVisibility(),
+		MenuLayout:      defaultMenuLayout(),
 	}
 }
 
@@ -134,6 +137,12 @@ func decodeConfig(data []byte) (Config, error) {
 		}
 	}
 	migrateTraffic(config.Visible, legacy.Visible)
+	config.MenuLayout = completeMenuLayout(config.MenuLayout)
+	for name, preset := range config.MenuPresets {
+		preset.Visible = completeMenuPresetVisibility(preset.Visible)
+		preset.Layout = completeMenuLayout(preset.Layout)
+		config.MenuPresets[name] = preset
+	}
 	if err := config.Validate(); err != nil {
 		return Config{}, err
 	}
@@ -405,6 +414,24 @@ func (c Config) Validate() error {
 	}
 	if err := validateMenu(c.Visible); err != nil {
 		return err
+	}
+	if err := validateMenuLayout(completeMenuLayout(c.MenuLayout)); err != nil {
+		return err
+	}
+	for name, preset := range c.MenuPresets {
+		canonical, err := customMenuPresetName(name)
+		if err != nil {
+			return err
+		}
+		if canonical != name {
+			return fmt.Errorf("menu preset name %q must be lowercase", name)
+		}
+		if err := validateMenu(preset.Visible); err != nil {
+			return fmt.Errorf("menu preset %q: %w", name, err)
+		}
+		if err := validateMenuLayout(completeMenuLayout(preset.Layout)); err != nil {
+			return fmt.Errorf("menu preset %q: %w", name, err)
+		}
 	}
 	if c.Background != "" {
 		if _, err := BackgroundColor(c.Background); err != nil {

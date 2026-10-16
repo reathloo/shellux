@@ -12,7 +12,7 @@ func TestLanguageSelectionSaveAndCancel(t *testing.T) {
 	original := config.Default()
 	saved := original
 	m := newModel(original, func(c config.Config) error { saved = c; return nil })
-	m.section = 3
+	m.section = generalSection
 	chooseRow(t, m, "language", "")
 	press(m, "enter")
 	press(m, "down")
@@ -47,6 +47,10 @@ func TestGermanSmallWindowAndLayout(t *testing.T) {
 	c := config.Default()
 	c.Language = "de"
 	m := newModel(c, nil)
+	m.section = presetsSection
+	if view := ansi.Strip(m.View().Content); !strings.Contains(view, "Menüvorlagen") || !strings.Contains(view, "Aktuelles Menü als Vorlage speichern") {
+		t.Fatalf("menu preset controls are not translated: %s", view)
+	}
 	for _, size := range [][2]int{{96, 30}, {64, 18}, {50, 12}} {
 		m.width, m.height = size[0], size[1]
 		v := m.View().Content

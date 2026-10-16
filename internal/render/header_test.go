@@ -213,6 +213,44 @@ func TestSelectedSparklinesRenderWithMetrics(t *testing.T) {
 	}
 }
 
+func TestCustomMenuAndComponentOrderRenders(t *testing.T) {
+	settings := config.Default()
+	settings.Visible["cpu.sparkline"] = true
+	settings.Visible["ram.sparkline"] = true
+	for range 2 {
+		if !settings.MoveMenuGroup("RESOURCES", -1) {
+			t.Fatal("could not move resources")
+		}
+	}
+	if !settings.MoveMenuItem("cpu", 1) {
+		t.Fatal("could not move CPU below cores")
+	}
+	for range 3 {
+		if !settings.MoveDisplayPart("ram", "percent", -1) {
+			t.Fatal("could not move RAM percent to the front")
+		}
+	}
+	snapshot := systeminfo.Snapshot{
+		CPU:    systeminfo.CPU{Cores: 4, LoadAverage: 1},
+		Memory: systeminfo.Memory{Total: 100, Available: 50},
+		Trends: systeminfo.Trends{CPU: []float64{0, 100}, Memory: []float64{25, 75}},
+	}
+	output := stripANSI(strings.Join(NewHeaderLayoutWithConfig(snapshot, "eye", theme.DarkLuxury(), settings).Dashboard, "\n"))
+	if strings.Index(output, "RESOURCES") > strings.Index(output, "SYSTEM") || strings.Index(output, "CORES") > strings.Index(output, "CPU") {
+		t.Fatalf("group or item order not applied: %s", output)
+	}
+	cpuLine := output[strings.Index(output, "│  CPU"):]
+	cpuLine = strings.Split(cpuLine, "\n")[0]
+	if strings.Index(cpuLine, "▁█") > strings.Index(cpuLine, "25%") {
+		t.Fatalf("CPU component order not applied: %s", cpuLine)
+	}
+	ramLine := output[strings.Index(output, "│  MEMORY"):]
+	ramLine = strings.Split(ramLine, "\n")[0]
+	if strings.Index(ramLine, "50%") > strings.Index(ramLine, "▂▆") {
+		t.Fatalf("RAM component order not applied: %s", ramLine)
+	}
+}
+
 func TestCPUValueIncludesUsageBarAndPercentage(t *testing.T) {
 	cpu := systeminfo.CPU{Cores: 8, LoadAverage: 4}
 	if got, want := cpuValueParts(cpu, true, true, true), "████░░░░ 4.00 load (50%)"; got != want {

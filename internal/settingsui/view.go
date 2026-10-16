@@ -11,7 +11,7 @@ import (
 	"github.com/reathloo/shellux/internal/locale"
 )
 
-var sections = []string{"Menu items", "Themes", "Appearance", "General"}
+var sections = []string{"Menu items", "Menu layouts", "Themes", "Appearance", "General"}
 
 func fit(s string, width int) string { return ansi.Truncate(s, max(0, width), "…") }
 func line(s string, width int) string {
@@ -116,7 +116,14 @@ func (m *model) mainView(width, height int, styles uiStyles) string {
 		isFocus := m.focus == 1 && i == selected
 		text := ""
 		if r.heading {
-			text = styles.heading(m.tr(r.label), i*3)
+			prefix := "  "
+			if i == selected {
+				prefix = "› "
+			}
+			text = styles.heading(prefix+"▾ "+m.tr(r.label), i*3)
+			if isFocus {
+				text = focused.Render(line(text, rw))
+			}
 		} else if r.action == "toggle" {
 			text = m.switchRow(r, i == selected, isFocus, rw, styles)
 		} else {
@@ -125,7 +132,7 @@ func (m *model) mainView(width, height int, styles uiStyles) string {
 				prefix = "› "
 			}
 			text = prefix + m.tr(r.label)
-			if r.value != "" && r.action != "theme" {
+			if r.value != "" && r.action != "theme" && r.action != "preset" {
 				value := r.value
 				if r.action == "language" {
 					value = m.tr(value)
@@ -158,8 +165,8 @@ func (m *model) mainView(width, height int, styles uiStyles) string {
 	description := m.tr(selectedRow.description)
 	if m.section == 0 && m.focus == 1 && selectedRow.action == "toggle" {
 		part := ""
-		if m.part > 0 {
-			part = selectedRow.entry.Parts[m.part-1]
+		if m.part >= 2 {
+			part = selectedRow.entry.Parts[m.part-2]
 		}
 		description = m.menuHelp(selectedRow.entry.Key, part)
 	}
@@ -176,10 +183,24 @@ func (m *model) mainView(width, height int, styles uiStyles) string {
 		cancel = focused.Render(m.tr("[ Cancel ]"))
 	}
 	help := m.tr("Tab / Shift+Tab: focus · ↑/↓: select · Enter: open")
-	if m.focus == 1 && m.section == 0 {
-		help = m.tr("←/→: switch · Space: toggle · Tab: focus")
+	if m.moveMode {
+		help = m.tr("Enter/Esc: done · ↑/↓: item/section · ←/→: switch")
+	} else if m.focus == 1 && m.section == 0 {
+		switch {
+		case selectedRow.action == "group":
+			help = m.tr("M: move section · ↑/↓: select")
+		case selectedRow.action == "toggle" && m.part == 0:
+			help = m.tr("M: move item · →: switches · Space: toggle")
+		case selectedRow.action == "toggle" && m.part == 1:
+			help = m.tr("Space: toggle · ←/→: select · M: move item")
+		case selectedRow.action == "toggle":
+			help = m.tr("Shift+←/→: move switch · Space: toggle · M: move item")
+		}
 	}
-	if m.focus == 1 && m.section == 1 {
+	if m.focus == 1 && m.section == presetsSection {
+		help = m.tr("↑/↓: layout · Enter: apply/save · Delete: remove saved layout")
+	}
+	if m.focus == 1 && m.section == themesSection {
 		help = m.tr("↑/↓: theme · Enter: apply · Delete: remove custom theme")
 	}
 	return strings.Join([]string{
@@ -195,8 +216,18 @@ func (m *model) switchRow(r row, selectedRow, focus bool, width int, styles uiSt
 	if selectedRow {
 		prefix = "› "
 	}
-	text := styles.secondary.Render(prefix + fmt.Sprintf("%-8s", m.tr(r.label)))
-	labels := []string{m.entryPreview(r.entry.Key)}
+	label := prefix + fmt.Sprintf("%-8s", m.tr(r.label))
+	text := ""
+	if focus && m.part == 0 {
+		text = focused.Underline(true).Render(label)
+	} else {
+		text = styles.secondary.Render(label)
+	}
+	masterLabel := m.tr("Enabled")
+	if len(r.entry.Parts) == 0 {
+		masterLabel += " · " + m.entryPreview(r.entry.Key)
+	}
+	labels := []string{masterLabel}
 	keys := []string{r.entry.Key}
 	for _, p := range r.entry.Parts {
 		keys = append(keys, r.entry.Key+"."+p)
@@ -205,8 +236,8 @@ func (m *model) switchRow(r row, selectedRow, focus bool, width int, styles uiSt
 	// Scroll controls horizontally in narrow windows, keeping the focused one
 	// completely visible. Its semantic name remains in the help area.
 	selected := 0
-	if focus {
-		selected = min(m.part, len(keys)-1)
+	if focus && m.part > 0 {
+		selected = min(m.part-1, len(keys)-1)
 	}
 	start, end := selected, selected+1
 	available := width - lipgloss.Width(text) - 2
@@ -231,7 +262,7 @@ func (m *model) switchRow(r row, selectedRow, focus bool, width int, styles uiSt
 			check = "[✓]"
 		}
 		cell := check + " " + labels[i]
-		if focus && i == m.part {
+		if focus && m.part > 0 && i == m.part-1 {
 			cell = focused.Underline(true).Render(cell)
 		} else {
 			cell = normal.Render(cell)
@@ -351,7 +382,7 @@ func (m *model) dialogView(width, height int, styles uiStyles) string {
 	case "input":
 		lines = append(lines, line(d.input.View(), width))
 		description := m.tr("Enter: apply · Esc: back")
-		if d.field == "theme" {
+		if d.field == "theme" || d.field == "preset" {
 			description = m.tr("Name: a–z, 0–9 and hyphens (1–32 characters).")
 		}
 		lines = append(lines, muted.Render(line(description, width)))

@@ -124,7 +124,7 @@ func main() {
 
 	emitBackground(settings.Background)
 	if *watch {
-		watchHeader(*interval, settings.Visible, *inPlace, *parentPID, selectedAnimation, selectedStyle, locale.Resolve(settings.Language))
+		watchHeader(*interval, settings, *inPlace, *parentPID, selectedAnimation, selectedStyle, locale.Resolve(settings.Language))
 		return
 	}
 
@@ -135,7 +135,7 @@ func main() {
 	}
 	var trends systeminfo.TrendRecorder
 	snapshot.Trends = trends.Observe(snapshot)
-	layout := render.NewHeaderLayout(snapshot, animation.Frame(selectedAnimation, 0), selectedStyle, settings.Visible, locale.Resolve(settings.Language))
+	layout := render.NewHeaderLayoutWithConfig(snapshot, animation.Frame(selectedAnimation, 0), selectedStyle, settings, locale.Resolve(settings.Language))
 	if *reserveHeader {
 		if rows, columns, sizeErr := terminal.Size(os.Stdout.Fd()); sizeErr == nil {
 			layout = layout.FitTerminal(columns, rows)
@@ -430,10 +430,10 @@ func menuReport(settings config.Config) string {
 		}
 		return "off"
 	}
-	for _, name := range config.MenuItems() {
-		fmt.Fprintf(&output, "  %-16s %s", config.DisplayMenuItem(name), state(name))
-		for _, part := range config.DisplayParts(name) {
-			fmt.Fprintf(&output, "  %s: %s", part, state(name+"."+part))
+	for _, entry := range settings.OrderedMenuEntries() {
+		fmt.Fprintf(&output, "  %-16s %s", entry.Name, state(entry.Key))
+		for _, part := range entry.Parts {
+			fmt.Fprintf(&output, "  %s: %s", part, state(entry.Key+"."+part))
 		}
 		fmt.Fprintln(&output)
 	}
@@ -442,7 +442,11 @@ func menuReport(settings config.Config) string {
 
 const commandHelp = `Shellux commands:
   shellux settings               visual settings menu (interactive terminal)
+                                  Menu layouts: save, apply, delete menu presets
                                   Tab: focus, arrows: select, Space: toggle
+                                  M: move mode; Up/Down: section/item
+                                  Left/Right: component, Enter: done
+                                  Shift+Left/Right: move selected switch directly
                                   Ctrl+S: save and reload header (clear scrollback)
                                   Esc: cancel, Ctrl+C: discard
   shellux                         redraw the fixed header
@@ -586,7 +590,8 @@ func isAnimation(name string) bool {
 	return false
 }
 
-func watchHeader(interval time.Duration, visible map[string]bool, inPlace bool, parentPID int, selectedAnimation animation.Animation, selectedStyle theme.Theme, language locale.Language) {
+func watchHeader(interval time.Duration, settings config.Config, inPlace bool, parentPID int, selectedAnimation animation.Animation, selectedStyle theme.Theme, language locale.Language) {
+	visible := settings.Visible
 	signalContext, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	ctx, cancel := context.WithCancel(signalContext)
@@ -626,7 +631,7 @@ func watchHeader(interval time.Duration, visible map[string]bool, inPlace bool, 
 		snapshotMu.RLock()
 		currentSnapshot := snapshot
 		snapshotMu.RUnlock()
-		layout := render.NewHeaderLayout(currentSnapshot, animation.Frame(selectedAnimation, frame), selectedStyle, visible, language)
+		layout := render.NewHeaderLayoutWithConfig(currentSnapshot, animation.Frame(selectedAnimation, frame), selectedStyle, settings, language)
 		if inPlace {
 			layout = layout.FitTerminal(columns, rows)
 		}

@@ -98,6 +98,15 @@ func HeaderWithConfig(snapshot systeminfo.Snapshot, eye string, colors theme.The
 
 // NewHeaderLayout prepares the eye and dashboard as separate terminal regions.
 func NewHeaderLayout(snapshot systeminfo.Snapshot, eye string, colors theme.Theme, visible map[string]bool, languages ...locale.Language) HeaderLayout {
+	settings := config.Default()
+	settings.Visible = visible
+	return NewHeaderLayoutWithConfig(snapshot, eye, colors, settings, languages...)
+}
+
+// NewHeaderLayoutWithConfig also applies the user's group, entry and component
+// ordering. NewHeaderLayout remains available for callers that only customize
+// visibility.
+func NewHeaderLayoutWithConfig(snapshot systeminfo.Snapshot, eye string, colors theme.Theme, settings config.Config, languages ...locale.Language) HeaderLayout {
 	lang := locale.English
 	if len(languages) > 0 {
 		lang = languages[0]
@@ -105,7 +114,7 @@ func NewHeaderLayout(snapshot systeminfo.Snapshot, eye string, colors theme.Them
 	snapshot.Memory.Pressure = lang.Text(snapshot.Memory.Pressure)
 	snapshot.Temperature.State = lang.Text(snapshot.Temperature.State)
 	show := func(name string) bool {
-		return config.Shown(visible, name)
+		return config.Shown(settings.Visible, name)
 	}
 
 	dashboard := []string{dashboardTitle(colors, snapshot.Now, show("time"))}
@@ -116,64 +125,24 @@ func NewHeaderLayout(snapshot systeminfo.Snapshot, eye string, colors theme.Them
 			dashboard = append(dashboard, sectionEnd(colors))
 		}
 	}
-	var items []string
-	add := func(name, label, value string) {
-		if config.EntryShown(visible, name) {
-			items = append(items, dashboardItem(colors, lang.Text(label), value))
+	entries := settings.OrderedMenuEntries()
+	for start := 0; start < len(entries); {
+		group := entries[start].Group
+		end := start
+		for end < len(entries) && entries[end].Group == group {
+			end++
 		}
-	}
-	add("platform", "platform", snapshot.System.Platform+" · "+snapshot.System.Architecture+" · "+snapshot.System.Hostname)
-	add("shell", "shell", snapshot.System.Shell+" · "+snapshot.System.Terminal)
-	add("uptime", "uptime", uptimeValue(snapshot.Uptime))
-	add("date", "date", dateValueParts(snapshot.Now, snapshot.Timezone, show("date.value"), show("date.timezone"), show("date.utc"), lang))
-	add("hostname", "hostname", availableText(snapshot.System.Hostname))
-	appendSection("SYSTEM", items)
-	items = nil
-	add("network-status", "status", networkStatusValueParts(snapshot.Network, show("network-status.value"), show("network-status.interface"), show("network-status.ip"), show("network-status.connection"), show("network-status.name"), lang))
-	add("network-traffic", "traffic", networkTrafficValue(snapshot.Network, snapshot.Trends.Network, show("network-traffic.sparkline"), show("network-traffic.upload"), show("network-traffic.download"), show("network-traffic.latency")))
-	add("ip", "ip", availableText(snapshot.Network.IPAddress))
-	appendSection("NETWORK", items)
-	items = nil
-	if config.EntryShown(visible, "cpu") {
-		metricsShown := show("cpu.bar") || show("cpu.sparkline") || show("cpu.percent") || show("cpu.value")
-		if metricsShown {
-			value := cpuValueParts(snapshot.CPU, show("cpu.bar"), show("cpu.percent"), show("cpu.value"), lang)
-			add("cpu", "cpu", withSparkline(value, snapshot.Trends.CPU, show("cpu.sparkline"), false))
-		}
-		if show("cpu.top") {
-			if metricsShown {
-				add("cpu", "  ↳ top", topProcessValue(snapshot.CPU.TopProcess, dashboardWidth-14))
-			} else {
-				add("cpu", "cpu", "Top · "+topProcessValue(snapshot.CPU.TopProcess, dashboardWidth-20))
+		if group != "HEADER" {
+			var items []string
+			for _, entry := range entries[start:end] {
+				for _, item := range dashboardEntry(snapshot, settings, entry, lang) {
+					items = append(items, dashboardItem(colors, lang.Text(item.label), item.value))
+				}
 			}
+			appendSection(group, items)
 		}
+		start = end
 	}
-	add("cores", "cores", coresValue(snapshot.CPU, show("cores.bar"), show("cores.percent"), show("cores.value"), lang))
-	add("ram", "memory", memoryWithPressure(snapshot.Memory, snapshot.Trends.Memory, show("ram.bar"), show("ram.sparkline"), show("ram.percent"), show("ram.value"), show("ram.pressure")))
-	add("volume", "volume", volumeValueParts(snapshot.Volume, show("volume.bar"), show("volume.percent"), show("volume.value")))
-	if config.EntryShown(visible, "battery") {
-		battery := batteryValueParts(snapshot.Battery, show("battery.bar"), show("battery.percent"), show("battery.value"), show("battery.remaining"), lang)
-		battery = withSparkline(battery, snapshot.Trends.Battery, show("battery.sparkline"), false)
-		if show("temperature") {
-			battery += " · " + temperatureValue(snapshot.Temperature)
-		}
-		add("battery", "battery", battery)
-	} else {
-		add("temperature", "thermal", temperatureValue(snapshot.Temperature))
-	}
-	appendSection("RESOURCES", items)
-	items = nil
-	add("directory", "path", compactDirectory(snapshot.Directory))
-	hasTrack := snapshot.Playback.Available && snapshot.Playback.Title != ""
-	spotify := lang.Text("No song playing")
-	progress := "N/A"
-	if hasTrack {
-		spotify = snapshot.Playback.Artist + " — " + snapshot.Playback.Title
-		progress = playbackValue(snapshot.Playback)
-	}
-	add("spotify", "spotify", spotify)
-	add("progress", "progress", progress)
-	appendSection("SESSION", items)
 	if colors.Rainbow {
 		for index, line := range dashboard {
 			dashboard[index] = rainbowize(line, index*3)
@@ -223,6 +192,302 @@ func dashboardItem(colors theme.Theme, label, value string) string {
 		return character
 	}, value)
 	return fmt.Sprintf("%s│  %s%-9s%s %s", colors.Muted, colors.Secondary, strings.ToUpper(label), colors.Reset, shorten(value, valueWidth))
+}
+
+type dashboardValue struct{ label, value string }
+
+func enabledParts(settings config.Config, entry config.MenuEntry) []string {
+	parts := make([]string, 0, len(entry.Parts))
+	for _, part := range entry.Parts {
+		if config.Shown(settings.Visible, entry.Key+"."+part) {
+			parts = append(parts, part)
+		}
+	}
+	return parts
+}
+
+func hasPart(parts []string, wanted string) bool { return slices.Contains(parts, wanted) }
+
+func dashboardLabel(entry config.MenuEntry) string {
+	if entry.Key == "ram" {
+		return "memory"
+	}
+	return entry.Name
+}
+
+func dashboardEntry(snapshot systeminfo.Snapshot, settings config.Config, entry config.MenuEntry, lang locale.Language) []dashboardValue {
+	if !config.EntryShown(settings.Visible, entry.Key) {
+		return nil
+	}
+	parts := enabledParts(settings, entry)
+	join := func(values []string, separator string) []dashboardValue {
+		return []dashboardValue{{dashboardLabel(entry), strings.Join(values, separator)}}
+	}
+	switch entry.Key {
+	case "platform":
+		return join([]string{snapshot.System.Platform + " · " + snapshot.System.Architecture + " · " + snapshot.System.Hostname}, "")
+	case "shell":
+		return join([]string{snapshot.System.Shell + " · " + snapshot.System.Terminal}, "")
+	case "uptime":
+		return join([]string{uptimeValue(snapshot.Uptime)}, "")
+	case "hostname":
+		return join([]string{availableText(snapshot.System.Hostname)}, "")
+	case "ip":
+		return join([]string{availableText(snapshot.Network.IPAddress)}, "")
+	case "directory":
+		return join([]string{compactDirectory(snapshot.Directory)}, "")
+	case "temperature":
+		if config.EntryShown(settings.Visible, "battery") {
+			return nil
+		}
+		return join([]string{temperatureValue(snapshot.Temperature)}, "")
+	case "spotify":
+		value := lang.Text("No song playing")
+		if snapshot.Playback.Available && snapshot.Playback.Title != "" {
+			value = snapshot.Playback.Artist + " — " + snapshot.Playback.Title
+		}
+		return join([]string{value}, "")
+	case "progress":
+		value := "N/A"
+		if snapshot.Playback.Available && snapshot.Playback.Title != "" {
+			value = playbackValue(snapshot.Playback)
+		}
+		return join([]string{value}, "")
+	case "date":
+		values := make([]string, 0, len(parts))
+		for _, part := range parts {
+			switch part {
+			case "value":
+				format := "2006-01-02"
+				if lang == locale.German {
+					format = "02.01.2006"
+				}
+				values = append(values, snapshot.Now.Format(format))
+			case "timezone":
+				values = append(values, availableText(snapshot.Timezone))
+			case "utc":
+				_, offset := snapshot.Now.Zone()
+				sign := "+"
+				if offset < 0 {
+					sign, offset = "-", -offset
+				}
+				values = append(values, fmt.Sprintf("UTC%s%02d:%02d", sign, offset/3600, offset%3600/60))
+			}
+		}
+		return join(values, " · ")
+	case "network-status":
+		if !snapshot.Network.Connected {
+			return join([]string{lang.Text("Disconnected")}, "")
+		}
+		values := make([]string, 0, len(parts))
+		for _, part := range parts {
+			switch part {
+			case "value":
+				values = append(values, lang.Text("Connected"))
+			case "interface":
+				values = append(values, availableText(snapshot.Network.Interface))
+			case "ip":
+				values = append(values, availableText(snapshot.Network.IPAddress))
+			case "connection":
+				values = append(values, availableText(snapshot.Network.Connection))
+			case "name":
+				values = append(values, availableText(snapshot.Network.Name))
+			}
+		}
+		return join(values, " · ")
+	case "network-traffic":
+		network := snapshot.Network
+		if !network.Connected {
+			network.UploadRate, network.DownloadRate = 0, 0
+		}
+		values := make([]string, 0, len(parts))
+		for _, part := range parts {
+			switch part {
+			case "upload":
+				values = append(values, "UP "+rateValue(network.UploadRate))
+			case "download":
+				values = append(values, "DOWN "+rateValue(network.DownloadRate))
+			case "latency":
+				values = append(values, latencyValue(network.Latency))
+			case "sparkline":
+				values = append(values, sparklineValue(snapshot.Trends.Network, true))
+			}
+		}
+		return join(values, " ")
+	case "cpu":
+		values := make([]string, 0, len(parts))
+		metricsAvailable := snapshot.CPU.Cores > 0
+		percentage := 0.0
+		if metricsAvailable {
+			percentage = min(100, snapshot.CPU.LoadAverage/float64(snapshot.CPU.Cores)*100)
+		}
+		unavailableAdded := false
+		for _, part := range parts {
+			switch part {
+			case "bar", "percent", "value":
+				if !metricsAvailable {
+					if !unavailableAdded {
+						values, unavailableAdded = append(values, "N/A"), true
+					}
+					continue
+				}
+				switch part {
+				case "bar":
+					values = append(values, usageBar(percentage, 8))
+				case "percent":
+					percent := fmt.Sprintf("%.0f%%", percentage)
+					if hasPart(parts, "value") {
+						percent = "(" + percent + ")"
+					}
+					values = append(values, percent)
+				case "value":
+					values = append(values, fmt.Sprintf("%.2f %s", snapshot.CPU.LoadAverage, lang.Text("load")))
+				}
+			case "sparkline":
+				values = append(values, sparklineValue(snapshot.Trends.CPU, false))
+			}
+		}
+		rows := []dashboardValue{}
+		if len(values) > 0 {
+			rows = append(rows, dashboardValue{entry.Name, strings.Join(values, " ")})
+		}
+		if hasPart(parts, "top") {
+			label := "  ↳ top"
+			value := topProcessValue(snapshot.CPU.TopProcess, dashboardWidth-14)
+			if len(rows) == 0 {
+				label, value = entry.Name, "Top · "+topProcessValue(snapshot.CPU.TopProcess, dashboardWidth-20)
+			}
+			rows = append(rows, dashboardValue{label, value})
+		}
+		return rows
+	case "cores":
+		values := make([]string, 0, len(parts))
+		usageUnavailableAdded := false
+		for _, part := range parts {
+			switch part {
+			case "bar":
+				if snapshot.CPU.UsageAvailable {
+					values = append(values, usageBar(snapshot.CPU.UsagePercent, 8))
+				} else if !usageUnavailableAdded {
+					values, usageUnavailableAdded = append(values, "N/A"), true
+				}
+			case "percent":
+				if snapshot.CPU.UsageAvailable {
+					percent := fmt.Sprintf("%.0f%%", snapshot.CPU.UsagePercent)
+					if hasPart(parts, "value") {
+						percent = "(" + percent + ")"
+					}
+					values = append(values, percent)
+				} else if !usageUnavailableAdded {
+					values, usageUnavailableAdded = append(values, "N/A"), true
+				}
+			case "value":
+				value := "N/A"
+				if snapshot.CPU.Cores > 0 {
+					value = fmt.Sprintf("%d %s", snapshot.CPU.Cores, lang.Text("cores"))
+				}
+				values = append(values, value)
+			}
+		}
+		return join(values, " ")
+	case "ram":
+		percentage := memoryPercentage(snapshot.Memory)
+		values := make([]string, 0, len(parts))
+		unavailableAdded := false
+		for _, part := range parts {
+			switch part {
+			case "bar", "percent", "value":
+				if snapshot.Memory.Total == 0 {
+					if !unavailableAdded {
+						values, unavailableAdded = append(values, "N/A"), true
+					}
+					continue
+				}
+				switch part {
+				case "bar":
+					values = append(values, usageBar(percentage, 8))
+				case "percent":
+					percent := fmt.Sprintf("%.0f%%", percentage)
+					if hasPart(parts, "value") {
+						percent = "(" + percent + ")"
+					}
+					values = append(values, percent)
+				case "value":
+					values = append(values, fmt.Sprintf("%.1f GiB", bytesToGiB(snapshot.Memory.Used())))
+				}
+			case "sparkline":
+				values = append(values, sparklineValue(snapshot.Trends.Memory, false))
+			case "pressure":
+				values = append(values, availableText(snapshot.Memory.Pressure))
+			}
+		}
+		return join(values, " · ")
+	case "volume":
+		percentage := 0.0
+		if snapshot.Volume.Total > 0 {
+			percentage = float64(snapshot.Volume.Used) / float64(snapshot.Volume.Total) * 100
+		}
+		values := orderedUsage(parts, snapshot.Volume.Available && snapshot.Volume.Total > 0, percentage, func() string {
+			return fmt.Sprintf("%.1f / %.1f GB", float64(snapshot.Volume.Used)/1e9, float64(snapshot.Volume.Total)/1e9)
+		})
+		return join(values, " ")
+	case "battery":
+		values := make([]string, 0, len(parts)+1)
+		if !snapshot.Battery.Available {
+			values = append(values, "N/A")
+		} else {
+			for _, part := range parts {
+				switch part {
+				case "bar":
+					values = append(values, usageBar(float64(snapshot.Battery.Percentage), 8))
+				case "percent":
+					values = append(values, fmt.Sprintf("%d%%", snapshot.Battery.Percentage))
+				case "value":
+					if snapshot.Battery.Charging {
+						values = append(values, "⚡")
+					} else if !hasPart(parts, "bar") && !hasPart(parts, "percent") {
+						values = append(values, lang.Text("Not charging"))
+					}
+				case "remaining":
+					remaining := "N/A"
+					if snapshot.Battery.RemainingAvailable {
+						minutes := max(1, int(snapshot.Battery.Remaining.Minutes()))
+						remaining = fmt.Sprintf("~%dh %dm", minutes/60, minutes%60)
+					}
+					values = append(values, remaining)
+				case "sparkline":
+					values = append(values, sparklineValue(snapshot.Trends.Battery, false))
+				}
+			}
+		}
+		if config.EntryShown(settings.Visible, "temperature") {
+			return []dashboardValue{{dashboardLabel(entry), strings.Join(values, " ") + " · " + temperatureValue(snapshot.Temperature)}}
+		}
+		return join(values, " ")
+	}
+	return nil
+}
+
+func orderedUsage(parts []string, available bool, percentage float64, detail func() string) []string {
+	if !available {
+		return []string{"N/A"}
+	}
+	values := make([]string, 0, len(parts))
+	for _, part := range parts {
+		switch part {
+		case "bar":
+			values = append(values, usageBar(percentage, 8))
+		case "percent":
+			percent := fmt.Sprintf("%.0f%%", percentage)
+			if hasPart(parts, "value") {
+				percent = "(" + percent + ")"
+			}
+			values = append(values, percent)
+		case "value":
+			values = append(values, detail())
+		}
+	}
+	return values
 }
 
 // EyeRegion returns animation-owned eye lines for an independent terminal update.

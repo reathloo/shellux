@@ -110,10 +110,10 @@ func TestMenuReportUsesPublicNamesAndComponentState(t *testing.T) {
 			t.Fatalf("menu contains %d rows for %s", count, public)
 		}
 	}
-	if !strings.Contains(report, "cpu              on  bar: off  percent: on  value: on") {
+	if !strings.Contains(report, "cpu              on  sparkline: off  bar: off  value: on  percent: on") {
 		t.Fatalf("missing CPU component state: %q", report)
 	}
-	if !strings.Contains(report, "traffic          on  upload: on  download: on  latency: off") {
+	if !strings.Contains(report, "traffic          on  sparkline: off  upload: on  download: on  latency: off") {
 		t.Fatalf("missing Traffic component state: %q", report)
 	}
 	for _, old := range []string{"directory", "network-traffic", "network-status", "temperature", "playback", "ram-free", "disk-free", "upload", "download", "latency"} {

@@ -42,8 +42,16 @@ changing it automatically.
 shellux settings
 ```
 
-Explore **Menu items**, **Themes**, **Appearance**, and **General** to choose what
-appears, select themes, set custom colors, and change the refresh interval.
+Explore **Menu items**, **Menu layouts**, **Themes**, **Appearance**, and
+**General** to choose what appears, save menu presets, select themes, set custom
+colors, and change the refresh interval.
+Under **Menu layouts**, save the current menu as a named layout, apply a saved
+layout or delete it. A layout includes visible items, detail switches and their
+order; it does not change the theme, colors, language or refresh interval.
+In **Menu items**, select a section, item or detail switch and press `M` to
+reorder it. In move mode, `↑/↓` moves a section or item, and `←/→` moves a detail
+switch. Press `Enter` to leave move mode, then save to apply the layout.
+You can also move a selected detail switch directly with `Shift+←/→`.
 CPU, RAM, network traffic, and battery can each show an optional eight-step
 sparkline summarizing the last minute; the existing detail switches remain independent.
 Under **General → Language**, choose **Automatic (system)**, **English**, or
