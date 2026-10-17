@@ -485,7 +485,7 @@ func (m *model) rows() []row {
 			}
 			return profileMark(m.draft.SelectedProfile == name)
 		}
-		rows := []row{{label: "Selection", action: "profile-selection", value: selection, description: "Choose automatic detection or manual preset layout selection. Small terminals use Minimal; Git and project directories use Coding."}}
+		rows := []row{{label: "Selection", action: "profile-selection", value: selection, description: "Choose automatic detection or manual preset layout selection. Small terminals use Minimal; SSH sessions use Remote; Git and project directories use Coding."}}
 		for _, name := range m.draft.MenuPresetOptions() {
 			mark := "[ ]"
 			if m.draft.ProfileSelection == "manual" && m.draft.SelectedProfile == "" && m.draft.MenuPresetMatches(name) {
@@ -511,6 +511,8 @@ func (m *model) rows() []row {
 				description = "Coding shows project, runtime and command context in a compact menu. Automatic selection detects Git or project files. Theme stays unchanged."
 			} else if name == "minimal" {
 				description = "Minimal shows time, path and concise system values with a small pulse. Automatic selection uses it when the terminal is narrow or short. Theme stays unchanged."
+			} else if name == "remote" {
+				description = "SSH / Remote shows account, SSH endpoints, terminal, path and concise system values. Automatic selection detects an incoming SSH session. Theme stays unchanged."
 			} else if name == "presentation" {
 				description = "Presentation shows only date, time, uptime, CPU, memory and online status in the Shellux header. Select it manually before sharing your screen."
 			} else if name == "focus" {

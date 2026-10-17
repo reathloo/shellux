@@ -105,6 +105,8 @@ var german = map[string]string{
 	" Enter stops only matching orphaned Shellux watchers.":                        " Enter beendet nur passende verwaiste Shellux-Watcher.",
 	" Fix this path manually; Doctor will not change it.":                          " Diesen Pfad bitte manuell korrigieren; Doctor ändert ihn nicht.",
 	"Date": "Datum", "Network name": "Netzwerkname", "UTC offset": "UTC-Abstand", "Latency": "Latenz",
+	"User": "Benutzer", "Host": "Rechner", "Client": "Client", "Server": "Server", "Terminal type": "Terminaltyp",
+	"identity": "Identität", "SSH link": "SSH-Verbindung", "terminal": "Terminal",
 
 	"Preparing selected themes… Esc: stop download":               "Themes werden vorbereitet… Esc: Download stoppen",
 	"Theme catalog offline; showing saved choices.":               "Theme-Katalog offline; gespeicherte Auswahl wird angezeigt.",

@@ -38,15 +38,19 @@ func TestCodingMenuEntriesHaveIndependentDetailsAndStartHidden(t *testing.T) {
 	}
 }
 
-func TestOldMenuLayoutsGainCodingGroup(t *testing.T) {
+func TestOldMenuLayoutsGainCodingAndRemoteGroups(t *testing.T) {
 	c := Default()
 	c.MenuLayout.Groups = []string{"NETWORK", "SYSTEM", "RESOURCES", "SESSION", "HEADER"}
 	delete(c.MenuLayout.Items, "CODING")
+	delete(c.MenuLayout.Items, "REMOTE")
 	for _, name := range []string{"git-branch", "git-sync", "runtimes", "dev-context", "last-command"} {
 		delete(c.MenuLayout.Components, name)
 	}
+	for _, name := range []string{"remote-identity", "ssh-link", "remote-terminal"} {
+		delete(c.MenuLayout.Components, name)
+	}
 	completed := completeMenuLayout(c.MenuLayout)
-	if !slices.Equal(completed.Groups, []string{"NETWORK", "SYSTEM", "RESOURCES", "CODING", "SESSION", "HEADER"}) {
+	if !slices.Equal(completed.Groups, []string{"NETWORK", "SYSTEM", "RESOURCES", "CODING", "REMOTE", "SESSION", "HEADER"}) {
 		t.Fatalf("migrated groups = %v", completed.Groups)
 	}
 	if err := validateMenuLayout(completed); err != nil {

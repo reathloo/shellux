@@ -209,7 +209,7 @@ def check_shell(shell):
             wait_for(b"38;5;201", style_start)
             assert b"38;5;201" in raw[style_start:], ("UI did not immediately adopt neon accents", bytes(raw[style_start:])[-2000:])
             assert b"38;5;45" in raw[style_start:], "UI did not immediately adopt neon border colors"
-            os.write(fd, b"\x1b[B\r" + b"\x1b[B" * 30 + b"\r")  # custom background
+            os.write(fd, b"\x1b[B\r" + b"\x1b[B" * 100 + b"\r")  # custom background at end of growing theme list
             drain(0.1)
             os.write(fd, b"\x01\x0b#123456\r")
             drain(0.1)

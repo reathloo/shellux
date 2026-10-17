@@ -36,6 +36,9 @@ var menuItems = []struct {
 	{"runtimes", "runtimes", "CODING", false, true},
 	{"dev-context", "contexts", "CODING", false, true},
 	{"last-command", "last cmd", "CODING", false, true},
+	{"remote-identity", "identity", "REMOTE", false, true},
+	{"ssh-link", "SSH link", "REMOTE", false, true},
+	{"remote-terminal", "terminal", "REMOTE", false, true},
 	{"directory", "path", "SESSION", true, false},
 	{"spotify", "spotify", "SESSION", true, false},
 	{"progress", "progress", "SESSION", true, false},
@@ -325,6 +328,12 @@ func DisplayParts(name string) []string {
 		return []string{"docker", "kubernetes"}
 	case "last-command":
 		return []string{"duration", "exit"}
+	case "remote-identity":
+		return []string{"user", "host"}
+	case "ssh-link":
+		return []string{"client", "server"}
+	case "remote-terminal":
+		return []string{"tty", "term"}
 	}
 	for _, item := range menuItems {
 		if item.name == name && item.parts {
@@ -384,6 +393,7 @@ func PartLabel(name, part string) string {
 		"branch": "Branch", "repository": "Repository", "ahead": "Ahead", "behind": "Behind",
 		"go": "Go", "node": "Node", "python": "Python", "java": "Java",
 		"docker": "Docker", "kubernetes": "Kubernetes", "duration": "Duration", "exit": "Exit code",
+		"user": "User", "host": "Host", "client": "Client", "server": "Server", "tty": "TTY", "term": "Terminal type",
 	}
 	return labels[part]
 }

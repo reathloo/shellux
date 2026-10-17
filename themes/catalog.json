@@ -15,6 +15,19 @@
       }
     },
     {
+      "name": "blueguy",
+      "version": "1.0.0",
+      "size": 74454,
+      "sha256": "3376a7ecc5bb4ebe4dc6a61f7d12d251fbe5b5638323ec40b820636460e23293",
+      "package": "packages/blueguy-1.0.0.shellux-theme",
+      "background": "#0e1c36",
+      "style": {
+        "secondary": "#68caff",
+        "accent": "#ff8a89",
+        "muted": "#ae87d6"
+      }
+    },
+    {
       "name": "bluerunner",
       "version": "1.0.0",
       "size": 13592,
@@ -41,6 +54,19 @@
       }
     },
     {
+      "name": "dacingsquid",
+      "version": "1.0.0",
+      "size": 50522,
+      "sha256": "feb6da1716dbbecf0a7ed464c2e706edf08231ecfa43216015f6c6ba874c28c9",
+      "package": "packages/dacingsquid-1.0.0.shellux-theme",
+      "background": "#1d1024",
+      "style": {
+        "secondary": "#a9f4e7",
+        "accent": "#d8fbf5",
+        "muted": "#b56adb"
+      }
+    },
+    {
       "name": "dancingpingu",
       "version": "1.0.1",
       "size": 54189,
@@ -51,6 +77,19 @@
         "secondary": "#ffc6f3",
         "accent": "#9bd4ff",
         "muted": "#8fc8f4"
+      }
+    },
+    {
+      "name": "goldstar",
+      "version": "1.0.0",
+      "size": 10456,
+      "sha256": "931805221e097ae9a8d9c91fc1ab2d563268ec048e28d6749bcc24244f4f22a1",
+      "package": "packages/goldstar-1.0.0.shellux-theme",
+      "background": "#14152a",
+      "style": {
+        "secondary": "#ffdc54",
+        "accent": "#fff69c",
+        "muted": "#e6c96b"
       }
     },
     {
@@ -145,6 +184,19 @@
       }
     },
     {
+      "name": "platypus",
+      "version": "1.0.0",
+      "size": 35358,
+      "sha256": "20e1b5a76d47e76d03410d45cefb8fbc2b54556ad20f9d91655308c0a68e22b2",
+      "package": "packages/platypus-1.0.0.shellux-theme",
+      "background": "#0b2530",
+      "style": {
+        "secondary": "#64d9d0",
+        "accent": "#ffac43",
+        "muted": "#d197ac"
+      }
+    },
+    {
       "name": "purplemonster",
       "version": "1.0.0",
       "size": 9746,
@@ -181,6 +233,19 @@
         "secondary": "#f04d5b",
         "accent": "#ffd369",
         "muted": "#a496a9"
+      }
+    },
+    {
+      "name": "snail",
+      "version": "1.0.0",
+      "size": 486316,
+      "sha256": "2ad8e1cb5edaa0a7b66d26923fbae2c2c8b3019e83960256834da9e2a4c9f60f",
+      "package": "packages/snail-1.0.0.shellux-theme",
+      "background": "#132322",
+      "style": {
+        "secondary": "#53e0dd",
+        "accent": "#ff8b7d",
+        "muted": "#e8c779"
       }
     },
     {

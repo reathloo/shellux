@@ -362,7 +362,7 @@ func TestCustomThemeLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Themes() error = %v", err)
 	}
-	for index, expected := range []string{"default", "anime-face", "bluerunner", "cryingking", "dancingpingu", "happycatus", "heart", "liqudemetall", "loopingliqude", "orangedragon", "orb", "pinkcat", "purplemonster", "shelluxdefault", "sleepyguy", "slotmaschine", "spiderboy", "my-neon"} {
+	for index, expected := range []string{"default", "anime-face", "blueguy", "bluerunner", "cryingking", "dacingsquid", "dancingpingu", "goldstar", "happycatus", "heart", "liqudemetall", "loopingliqude", "orangedragon", "orb", "pinkcat", "platypus", "purplemonster", "shelluxdefault", "sleepyguy", "slotmaschine", "snail", "spiderboy", "my-neon"} {
 		if index >= len(themes) || themes[index].Name != expected {
 			t.Fatalf("Themes() = %+v, expected %q at index %d", themes, expected, index)
 		}

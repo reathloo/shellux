@@ -47,8 +47,8 @@ and **Doctor** to choose what appears, save menu presets, select themes, set cus
 colors, and change the refresh interval.
 **Menu layouts** shows saved layouts and preset layouts in two columns. The
 selection above them switches between automatic detection and manual choice.
-**Coding**, **Minimal**, **Presentation**, **Focus** and **Snapshot** are working presets;
-SSH / Remote remains a placeholder. Manual selection works in any directory. Automatic Coding
+**Coding**, **Minimal**, **SSH / Remote**, **Presentation**, **Focus** and **Snapshot** are working presets.
+Manual selection works in any directory. Automatic Coding
 activates inside a Git repository or a project containing `go.mod`,
 `package.json`, `pyproject.toml`, `Cargo.toml`, `pom.xml`, or a Gradle build file.
 Changing directories into or out of a Coding project refreshes the header in
@@ -62,6 +62,15 @@ Automatic Minimal takes precedence when the terminal is narrower than 110
 columns or shorter than 18 rows. It shows time, path, optional Git branch,
 CPU and memory in a compact list with a small pulsing indicator. The selected
 theme remains saved and the usual layout returns as soon as there is room.
+Automatic SSH / Remote activates in an incoming SSH shell when `SSH_CONNECTION`,
+`SSH_CLIENT` or `SSH_TTY` is set. It takes precedence over Coding, while Minimal
+still wins on a small terminal. The preset shows account and host, SSH client
+and server endpoints, TTY and terminal type, path, connection status, uptime,
+CPU and memory. Identity, SSH link and terminal each have two independent detail
+switches under **Menu items → REMOTE**. Missing SSH values show `N/A`; no server
+is contacted to fill them in. The preset preserves the selected theme
+and restores the usual layout when the SSH session ends. `SSH_AUTH_SOCK` alone
+does not count as a remote session; manually selecting Remote also works locally.
 Presentation is selected manually before screen sharing or recording. Its
 Shellux header shows only date, time, uptime, CPU and memory percentages, and
 connected/disconnected status. It hides paths, host and network names, IPs,

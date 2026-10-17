@@ -66,7 +66,6 @@ func (c *Config) SetProfileSelection(selection string) error {
 }
 
 // ActiveProfile resolves the one profile applicable to this directory.
-// Remote stays a placeholder until its behavior is defined.
 const minimalColumns, minimalRows = 110, 18
 
 func (c Config) ActiveProfile(directory string, size ...int) string {
@@ -89,12 +88,15 @@ func (c Config) ActiveProfile(directory string, size ...int) string {
 		if len(size) >= 2 && size[0] > 0 && size[1] > 0 && (size[0] < minimalColumns || size[1] < minimalRows) {
 			return "minimal"
 		}
+		if isRemoteSession() {
+			return "remote"
+		}
 		if isCodingProject(directory) {
 			return "coding"
 		}
 		return ""
 	}
-	if c.SelectedProfile == "coding" || c.SelectedProfile == "minimal" || c.SelectedProfile == "presentation" || c.SelectedProfile == "snapshot" || c.SelectedProfile == "focus" {
+	if c.SelectedProfile == "coding" || c.SelectedProfile == "minimal" || c.SelectedProfile == "remote" || c.SelectedProfile == "presentation" || c.SelectedProfile == "snapshot" || c.SelectedProfile == "focus" {
 		return c.SelectedProfile
 	}
 	return ""
@@ -148,6 +150,10 @@ func isCodingProject(directory string) bool {
 	return hasProjectMarker(directory, append([]string{".git"}, codingMarkers...))
 }
 
+func isRemoteSession() bool {
+	return os.Getenv("SSH_CONNECTION") != "" || os.Getenv("SSH_CLIENT") != "" || os.Getenv("SSH_TTY") != ""
+}
+
 func hasProjectMarker(directory string, markers []string) bool {
 	directory, err := filepath.Abs(directory)
 	if err != nil {
@@ -174,7 +180,7 @@ func hasProjectMarker(directory string, markers []string) bool {
 // EffectiveProfile returns a temporary preset menu without changing saved settings.
 func (c Config) EffectiveProfile(directory string, size ...int) Config {
 	profile := c.ActiveProfile(directory, size...)
-	if profile != "coding" && profile != "minimal" && profile != "presentation" && profile != "snapshot" && profile != "focus" {
+	if profile != "coding" && profile != "minimal" && profile != "remote" && profile != "presentation" && profile != "snapshot" && profile != "focus" {
 		return c
 	}
 	effective := c.Clone()
@@ -196,7 +202,7 @@ func (c Config) EffectiveProfile(directory string, size ...int) Config {
 			effective.Visible[name] = true
 		}
 		effective.MenuLayout = defaultMenuLayout()
-		effective.MenuLayout.Groups = []string{"SYSTEM", "RESOURCES", "NETWORK", "HEADER", "CODING", "SESSION"}
+		effective.MenuLayout.Groups = []string{"SYSTEM", "RESOURCES", "NETWORK", "HEADER", "CODING", "REMOTE", "SESSION"}
 		return effective
 	}
 	if profile == "snapshot" {
@@ -212,7 +218,7 @@ func (c Config) EffectiveProfile(directory string, size ...int) Config {
 			effective.Visible["last-command.exit"] = true
 		}
 		effective.MenuLayout = defaultMenuLayout()
-		effective.MenuLayout.Groups = []string{"SYSTEM", "RESOURCES", "NETWORK", "CODING", "SESSION", "HEADER"}
+		effective.MenuLayout.Groups = []string{"SYSTEM", "RESOURCES", "NETWORK", "CODING", "REMOTE", "SESSION", "HEADER"}
 		return effective
 	}
 	if profile == "focus" {
@@ -223,7 +229,18 @@ func (c Config) EffectiveProfile(directory string, size ...int) Config {
 			effective.Visible[name] = true
 		}
 		effective.MenuLayout = defaultMenuLayout()
-		effective.MenuLayout.Groups = []string{"RESOURCES", "SYSTEM", "NETWORK", "CODING", "SESSION", "HEADER"}
+		effective.MenuLayout.Groups = []string{"RESOURCES", "SYSTEM", "NETWORK", "CODING", "REMOTE", "SESSION", "HEADER"}
+		return effective
+	}
+	if profile == "remote" {
+		for _, name := range []string{"remote-identity", "ssh-link", "remote-terminal", "uptime", "directory", "network-status", "cpu", "ram", "time"} {
+			effective.Visible[name] = true
+		}
+		for _, name := range []string{"remote-identity.user", "remote-identity.host", "ssh-link.client", "ssh-link.server", "remote-terminal.tty", "remote-terminal.term", "network-status.value", "network-status.interface", "cpu.percent", "ram.percent"} {
+			effective.Visible[name] = true
+		}
+		effective.MenuLayout = defaultMenuLayout()
+		effective.MenuLayout.Groups = []string{"REMOTE", "RESOURCES", "SESSION", "NETWORK", "SYSTEM", "CODING", "HEADER"}
 		return effective
 	}
 	for _, name := range []string{"directory", "cpu", "ram", "time"} {
@@ -237,7 +254,7 @@ func (c Config) EffectiveProfile(directory string, size ...int) Config {
 			effective.Visible["git-branch.branch"] = true
 		}
 		effective.MenuLayout = defaultMenuLayout()
-		effective.MenuLayout.Groups = []string{"CODING", "SESSION", "RESOURCES", "HEADER", "SYSTEM", "NETWORK"}
+		effective.MenuLayout.Groups = []string{"CODING", "SESSION", "RESOURCES", "HEADER", "SYSTEM", "NETWORK", "REMOTE"}
 		return effective
 	}
 	if hasProjectMarker(directory, []string{".git"}) {
@@ -272,6 +289,6 @@ func (c Config) EffectiveProfile(directory string, size ...int) Config {
 		effective.Visible["last-command.exit"] = true
 	}
 	effective.MenuLayout = defaultMenuLayout()
-	effective.MenuLayout.Groups = []string{"CODING", "SESSION", "RESOURCES", "NETWORK", "SYSTEM", "HEADER"}
+	effective.MenuLayout.Groups = []string{"CODING", "SESSION", "RESOURCES", "NETWORK", "SYSTEM", "HEADER", "REMOTE"}
 	return effective
 }

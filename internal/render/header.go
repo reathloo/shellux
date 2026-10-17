@@ -295,6 +295,36 @@ func dashboardEntry(snapshot systeminfo.Snapshot, settings config.Config, entry 
 		return []dashboardValue{{dashboardLabel(entry), strings.Join(values, separator)}}
 	}
 	switch entry.Key {
+	case "remote-identity":
+		values := make([]string, 0, len(parts))
+		for _, part := range parts {
+			if part == "user" {
+				values = append(values, availableText(snapshot.Remote.User))
+			} else if part == "host" {
+				values = append(values, availableText(snapshot.System.Hostname))
+			}
+		}
+		return join(values, "@")
+	case "ssh-link":
+		values := make([]string, 0, len(parts))
+		for _, part := range parts {
+			if part == "client" {
+				values = append(values, availableText(snapshot.Remote.Client))
+			} else if part == "server" {
+				values = append(values, availableText(snapshot.Remote.Server))
+			}
+		}
+		return join(values, " → ")
+	case "remote-terminal":
+		values := make([]string, 0, len(parts))
+		for _, part := range parts {
+			if part == "tty" {
+				values = append(values, "TTY "+availableText(snapshot.Remote.TTY))
+			} else if part == "term" {
+				values = append(values, availableText(snapshot.Remote.Term))
+			}
+		}
+		return join(values, " · ")
 	case "git-branch":
 		values := make([]string, 0, len(parts))
 		for _, part := range parts {

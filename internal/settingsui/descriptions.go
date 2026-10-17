@@ -33,6 +33,9 @@ var entryHelp = map[string]helpText{
 	"runtimes":        {"Shows installed Go, Node, Python and Java versions reported by their commands.", "Zeigt die von den Befehlen gemeldeten Go-, Node-, Python- und Java-Versionen."},
 	"dev-context":     {"Shows the selected local Docker and Kubernetes contexts without contacting a server.", "Zeigt die lokal gewählten Docker- und Kubernetes-Kontexte ohne Serverkontakt."},
 	"last-command":    {"Shows duration and exit code of the last non-Shellux command from the sourced shell.", "Zeigt Dauer und Exit-Code des letzten Befehls außerhalb von Shellux aus der eingebundenen Shell."},
+	"remote-identity": {"Shows the account and host of this shell.", "Zeigt Benutzerkonto und Rechner dieser Shell."},
+	"ssh-link":        {"Shows the client and server endpoints reported by SSH, without network requests.", "Zeigt die von SSH gemeldeten Client- und Server-Endpunkte ohne Netzwerkanfragen."},
+	"remote-terminal": {"Shows the SSH terminal device and terminal type.", "Zeigt das SSH-Terminalgerät und den Terminaltyp."},
 	"directory":       {"Shows the current working directory, shortened to fit the dashboard.", "Zeigt das aktuelle Arbeitsverzeichnis, passend zur Dashboard-Breite gekürzt."},
 	"spotify":         {"Shows artist and title from the Spotify desktop app, or that nothing is playing.", "Zeigt Interpret und Titel aus der Spotify-Desktop-App oder dass nichts wiedergegeben wird."},
 	"progress":        {"Shows playback state, elapsed time and song progress for Spotify.", "Zeigt Wiedergabestatus, vergangene Zeit und Songfortschritt von Spotify."},
@@ -62,6 +65,18 @@ var componentHelp = map[string]map[string]helpText{
 	"last-command": {
 		"duration": {"Shows elapsed whole seconds; commands under one second appear as <1s.", "Zeigt vergangene volle Sekunden; Befehle unter einer Sekunde erscheinen als <1s."},
 		"exit":     {"Shows the exit code of the last command in this shell.", "Zeigt den Exit-Code des letzten Befehls in dieser Shell."},
+	},
+	"remote-identity": {
+		"user": {"Shows the current operating-system account.", "Zeigt das aktuelle Betriebssystemkonto."},
+		"host": {"Shows the current computer name.", "Zeigt den Namen des aktuellen Rechners."},
+	},
+	"ssh-link": {
+		"client": {"Shows the SSH client's IP address and port.", "Zeigt IP-Adresse und Port des SSH-Clients."},
+		"server": {"Shows the SSH server's IP address and port when available.", "Zeigt IP-Adresse und Port des SSH-Servers, wenn verfügbar."},
+	},
+	"remote-terminal": {
+		"tty":  {"Shows the SSH terminal device, or N/A outside an SSH TTY.", "Zeigt das SSH-Terminalgerät oder N/A außerhalb eines SSH-TTY."},
+		"term": {"Shows the TERM type used by the current shell.", "Zeigt den TERM-Typ der aktuellen Shell."},
 	},
 	"load-average": {
 		"one":     {"Shows the one-minute runnable-task average.", "Zeigt den Mittelwert ausführbarer Aufgaben über eine Minute."},

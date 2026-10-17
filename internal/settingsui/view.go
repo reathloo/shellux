@@ -386,6 +386,12 @@ func (m *model) entryPreview(entry string) string {
 		return "Docker default · K8s local"
 	case "last-command":
 		return "<1s · exit 0"
+	case "remote-identity":
+		return "deploy@server"
+	case "ssh-link":
+		return "192.0.2.1:54321 → 192.0.2.10:22"
+	case "remote-terminal":
+		return "TTY /dev/pts/3 · xterm-256color"
 	case "spotify":
 		return "Artist — Song"
 	case "progress":
@@ -426,6 +432,18 @@ func (m *model) componentPreview(entry, part string) string {
 		return "<1s"
 	case "last-command.exit":
 		return "exit 0"
+	case "remote-identity.user":
+		return "deploy"
+	case "remote-identity.host":
+		return "server"
+	case "ssh-link.client":
+		return "192.0.2.1:54321"
+	case "ssh-link.server":
+		return "192.0.2.10:22"
+	case "remote-terminal.tty":
+		return "/dev/pts/3"
+	case "remote-terminal.term":
+		return "xterm-256color"
 	}
 	switch part {
 	case "bar":
