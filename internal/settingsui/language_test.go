@@ -48,7 +48,7 @@ func TestGermanSmallWindowAndLayout(t *testing.T) {
 	c.Language = "de"
 	m := newModel(c, nil)
 	m.section = presetsSection
-	if view := ansi.Strip(m.View().Content); !strings.Contains(view, "Menüvorlagen") || !strings.Contains(view, "Aktuelles Menü als Vorlage speichern") {
+	if view := ansi.Strip(m.View().Content); !strings.Contains(view, "Menüvorlagen") || !strings.Contains(view, "Eigene Vorlagen") || !strings.Contains(view, "Preset-Vorlagen") {
 		t.Fatalf("menu preset controls are not translated: %s", view)
 	}
 	for _, size := range [][2]int{{96, 30}, {64, 18}, {50, 12}} {

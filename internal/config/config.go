@@ -47,28 +47,36 @@ func availableThemes() map[string]SavedTheme {
 
 // Config contains the user-facing Shellux settings.
 type Config struct {
-	Language        string                     `json:"language,omitempty"`
-	Background      string                     `json:"background,omitempty"`
-	Animation       string                     `json:"animation"`
-	Style           string                     `json:"style"`
-	RefreshInterval string                     `json:"refresh_interval"`
-	Visible         map[string]bool            `json:"visible"`
-	MenuLayout      MenuLayout                 `json:"menu_layout"`
-	MenuPresets     map[string]SavedMenuPreset `json:"menu_presets,omitempty"`
-	Themes          map[string]SavedTheme      `json:"themes,omitempty"`
-	FavoriteThemes  map[string]bool            `json:"favorite_themes,omitempty"`
+	Language               string                     `json:"language,omitempty"`
+	Background             string                     `json:"background,omitempty"`
+	Animation              string                     `json:"animation"`
+	Style                  string                     `json:"style"`
+	RefreshInterval        string                     `json:"refresh_interval"`
+	Visible                map[string]bool            `json:"visible"`
+	MenuLayout             MenuLayout                 `json:"menu_layout"`
+	MenuPresets            map[string]SavedMenuPreset `json:"menu_presets,omitempty"`
+	ProfileSelection       string                     `json:"profile_selection,omitempty"`
+	SelectedProfile        string                     `json:"selected_profile,omitempty"`
+	FocusUntil             string                     `json:"focus_until,omitempty"`
+	FocusMinutes           int                        `json:"focus_minutes,omitempty"`
+	FocusPreviousSelection string                     `json:"focus_previous_selection,omitempty"`
+	FocusPreviousProfile   string                     `json:"focus_previous_profile,omitempty"`
+	RuntimeProfile         string                     `json:"-"`
+	Themes                 map[string]SavedTheme      `json:"themes,omitempty"`
+	FavoriteThemes         map[string]bool            `json:"favorite_themes,omitempty"`
 }
 
 func Default() Config {
 	base := availableThemes()["shelluxdefault"]
 	return Config{
-		Language:        "auto",
-		Background:      base.Background,
-		Animation:       base.Animation,
-		Style:           base.Style,
-		RefreshInterval: "1s",
-		Visible:         defaultVisibility(),
-		MenuLayout:      defaultMenuLayout(),
+		Language:         "auto",
+		Background:       base.Background,
+		Animation:        base.Animation,
+		Style:            base.Style,
+		RefreshInterval:  "1s",
+		ProfileSelection: "manual",
+		Visible:          defaultVisibility(),
+		MenuLayout:       defaultMenuLayout(),
 	}
 }
 
@@ -98,6 +106,10 @@ func decodeConfig(data []byte) (Config, error) {
 		return Config{}, fmt.Errorf("parse config: %w", err)
 	}
 	migrateThemeNames(&config)
+	// Older releases exposed Focus as a placeholder without a timer.
+	if config.SelectedProfile == "focus" && config.FocusUntil == "" && config.FocusMinutes == 0 {
+		config.SelectedProfile = ""
+	}
 	// Older active configurations and saved themes retain their profile background.
 	if legacy.Background == nil || config.Background == "" {
 		config.Background = "default"
@@ -147,6 +159,7 @@ func decodeConfig(data []byte) (Config, error) {
 	if err := config.Validate(); err != nil {
 		return Config{}, err
 	}
+	config.RestoreExpiredFocus(time.Now())
 	return config, nil
 }
 
@@ -445,6 +458,26 @@ func writeDefault(settings Config) (string, error) {
 }
 
 func (c Config) Validate() error {
+	if c.ProfileSelection != "manual" && c.ProfileSelection != "auto" {
+		return fmt.Errorf("unknown profile selection %q", c.ProfileSelection)
+	}
+	if c.SelectedProfile != "" && !ValidProfile(c.SelectedProfile) {
+		return fmt.Errorf("unknown selected profile %q", c.SelectedProfile)
+	}
+	if c.FocusMinutes < 0 || c.FocusMinutes > 240 {
+		return fmt.Errorf("focus timer must be 1 to 240 minutes")
+	}
+	if c.FocusUntil != "" {
+		if _, err := time.Parse(time.RFC3339Nano, c.FocusUntil); err != nil {
+			return fmt.Errorf("invalid focus end time: %w", err)
+		}
+	}
+	if c.FocusPreviousSelection != "" && c.FocusPreviousSelection != "manual" && c.FocusPreviousSelection != "auto" {
+		return fmt.Errorf("unknown previous profile selection %q", c.FocusPreviousSelection)
+	}
+	if c.FocusPreviousProfile != "" && !ValidProfile(c.FocusPreviousProfile) {
+		return fmt.Errorf("unknown previous profile %q", c.FocusPreviousProfile)
+	}
 	if !locale.Valid(c.Language) {
 		return fmt.Errorf("unsupported language %q", c.Language)
 	}

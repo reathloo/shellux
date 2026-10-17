@@ -100,15 +100,15 @@ func (m *model) mainView(width, height int, styles uiStyles) string {
 		}
 		nav[i-navStart] = text
 	}
-	if bodyHeight > 6 {
-		nav[6] = muted.Render(line(fmt.Sprintf(m.tr("%d / 11 slots"), config.MenuSlots(m.draft.Visible)), 18))
+	if bodyHeight > len(sections)+1 {
+		nav[len(sections)+1] = muted.Render(line(fmt.Sprintf(m.tr("%d / 11 slots"), config.MenuSlots(m.draft.Visible)), 18))
 	}
-	if bodyHeight > 8 {
+	if bodyHeight > len(sections)+3 {
 		state := m.tr("Saved")
 		if m.dirty() {
 			state = m.tr("Unsaved")
 		}
-		nav[8] = muted.Render(line(state, 18))
+		nav[len(sections)+3] = muted.Render(line(state, 18))
 	}
 	rows := m.rows()
 	selected := min(m.cursors[m.section], len(rows)-1)
@@ -134,7 +134,7 @@ func (m *model) mainView(width, height int, styles uiStyles) string {
 				prefix = "› "
 			}
 			text = prefix + m.tr(r.label)
-			if r.value != "" && r.action != "theme" && r.action != "preset" {
+			if r.value != "" && r.action != "theme" && r.action != "preset" && r.action != "profile" {
 				value := r.value
 				if r.action == "language" || m.section == doctorSection {
 					value = m.tr(value)
@@ -151,6 +151,10 @@ func (m *model) mainView(width, height int, styles uiStyles) string {
 			}
 		}
 		content[i-start] = line(text, rw)
+	}
+	if m.section == presetsSection {
+		content = m.layoutColumns(rows, selected, bodyHeight, rw, styles)
+		start, end = 0, len(rows)
 	}
 	body := make([]string, bodyHeight)
 	for i := range body {
@@ -203,7 +207,7 @@ func (m *model) mainView(width, height int, styles uiStyles) string {
 		}
 	}
 	if m.focus == 1 && m.section == presetsSection {
-		help = m.tr("↑/↓: layout · Enter: apply/save · Delete: remove saved layout")
+		help = m.tr("←/→: column · ↑/↓: layout · Enter: select · Delete: remove")
 	}
 	if m.focus == 1 && m.section == themesSection {
 		help = m.tr("↑/↓: theme · Enter: apply · F: favorite · U: uninstall")
@@ -216,6 +220,53 @@ func (m *model) mainView(width, height int, styles uiStyles) string {
 		muted.Render(wrapped(description, width, 2)), line(accent.Render(status), width), line(save+"  "+cancel, width),
 		muted.Render(line(help, width)), muted.Render(line(m.tr("Ctrl+S: save · Esc: cancel · Ctrl+C: discard"), width)),
 	}, "\n")
+}
+
+func (m *model) layoutColumns(rows []row, selected, height, width int, styles uiStyles) []string {
+	content := make([]string, height)
+	leftWidth := (width - 2) / 2
+	rightWidth := width - leftWidth - 2
+	leftEnd := 2 + len(m.draft.MenuPresetOptions())
+	left, right := rows[1:leftEnd], rows[leftEnd:]
+	render := func(r row, chosen bool, size int) string {
+		prefix := "  "
+		if chosen {
+			prefix = "› "
+		}
+		value := prefix + m.tr(r.label)
+		if r.action == "profile-selection" {
+			value += "  · " + r.value
+		}
+		if chosen && m.focus == 1 {
+			return styles.focused.Render(line(value, size))
+		}
+		return styles.normal.Render(line(value, size))
+	}
+	content[0] = render(rows[0], selected == 0, width)
+	if height == 1 {
+		return content
+	}
+	content[1] = line(styles.secondary.Render(m.tr("Saved layouts")), leftWidth) + "  " + line(styles.secondary.Render(m.tr("Preset layouts")), rightWidth)
+	visible := height - 2
+	leftSelected, rightSelected := 0, 0
+	if selected > 0 && selected < leftEnd {
+		leftSelected = selected - 1
+	} else if selected >= leftEnd {
+		rightSelected = selected - leftEnd
+	}
+	leftStart, _ := window(len(left), leftSelected, visible)
+	rightStart, _ := window(len(right), rightSelected, visible)
+	for i := 0; i < visible; i++ {
+		leftLine, rightLine := line("", leftWidth), line("", rightWidth)
+		if index := leftStart + i; index < len(left) {
+			leftLine = render(left[index], selected == index+1, leftWidth)
+		}
+		if index := rightStart + i; index < len(right) {
+			rightLine = render(right[index], selected == index+leftEnd, rightWidth)
+		}
+		content[i+2] = leftLine + "  " + rightLine
+	}
+	return content
 }
 
 func (m *model) switchRow(r row, selectedRow, focus bool, width int, styles uiStyles) string {
@@ -325,6 +376,16 @@ func (m *model) entryPreview(entry string) string {
 		return m.tr("Normal")
 	case "directory":
 		return "~/dev/shellux"
+	case "git-branch":
+		return "main · repo shellux"
+	case "git-sync":
+		return "↑2 · ↓1"
+	case "runtimes":
+		return "Go 1.25 · Node 22"
+	case "dev-context":
+		return "Docker default · K8s local"
+	case "last-command":
+		return "<1s · exit 0"
 	case "spotify":
 		return "Artist — Song"
 	case "progress":
@@ -340,6 +401,32 @@ func (m *model) entryPreview(entry string) string {
 }
 
 func (m *model) componentPreview(entry, part string) string {
+	switch entry + "." + part {
+	case "git-branch.branch":
+		return "main"
+	case "git-branch.repository":
+		return "shellux"
+	case "git-sync.ahead":
+		return "↑2"
+	case "git-sync.behind":
+		return "↓1"
+	case "runtimes.go":
+		return "Go 1.25"
+	case "runtimes.node":
+		return "Node 22"
+	case "runtimes.python":
+		return "Python 3.13"
+	case "runtimes.java":
+		return "Java 21"
+	case "dev-context.docker":
+		return "default"
+	case "dev-context.kubernetes":
+		return "local"
+	case "last-command.duration":
+		return "<1s"
+	case "last-command.exit":
+		return "exit 0"
+	}
 	switch part {
 	case "bar":
 		return "████░░░░"

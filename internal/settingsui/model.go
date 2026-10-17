@@ -8,7 +8,9 @@ import (
 	"os"
 	"reflect"
 	"slices"
+	"strconv"
 	"strings"
+	"time"
 
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
@@ -77,6 +79,33 @@ type row struct {
 	custom                            bool
 }
 type choice struct{ label, value, color string }
+
+func profileMark(selected bool) string {
+	if selected {
+		return "[✓]"
+	}
+	return "[ ]"
+}
+
+func profileLabel(name string) string {
+	switch name {
+	case "coding":
+		return "Coding"
+	case "minimal":
+		return "Minimal"
+	case "remote":
+		return "SSH / Remote"
+	case "presentation":
+		return "Presentation"
+	case "focus":
+		return "Focus"
+	case "snapshot":
+		return "Snapshot"
+	default:
+		return name
+	}
+}
+
 type dialog struct {
 	kind, title, field, action, value string
 	choices                           []choice
@@ -154,10 +183,13 @@ func (m *model) saveDraft() tea.Cmd {
 	return m.commitDraft()
 }
 func (m *model) commitDraft() tea.Cmd {
-	if err := m.save(m.draft.Clone()); err != nil {
+	draft := m.draft.Clone()
+	draft.ActivateFocus(time.Now())
+	if err := m.save(draft); err != nil {
 		m.notice = m.tr("Could not save: ") + m.tr(friendly(err))
 		return nil
 	}
+	m.draft = draft
 	return m.finish(Saved)
 }
 func (m *model) cancel() tea.Cmd {
@@ -354,6 +386,8 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					}
 					m.part = (m.part + step + n) % n
 				}
+			} else if m.focus == 1 && m.section == presetsSection {
+				m.moveLayoutColumn(key == "right")
 			} else if m.focus >= 2 {
 				if m.focus == 2 {
 					m.focus = 3
@@ -434,10 +468,27 @@ func (m *model) rows() []row {
 		}
 		return append(rows, row{label: "Reset menu items", action: "reset", description: "Reset items, components and their order; appearance stays unchanged."})
 	case presetsSection:
-		rows := []row{}
+		selection := m.tr("Manual")
+		active := ""
+		if m.draft.ProfileSelection == "auto" {
+			selection = m.tr("Automatic")
+			if directory, err := os.Getwd(); err == nil {
+				active = m.draft.ActiveProfile(directory, m.width, m.height)
+			}
+		}
+		markProfile := func(name string) string {
+			if m.draft.ProfileSelection == "auto" {
+				if active == name {
+					return "[A]"
+				}
+				return "[ ]"
+			}
+			return profileMark(m.draft.SelectedProfile == name)
+		}
+		rows := []row{{label: "Selection", action: "profile-selection", value: selection, description: "Choose automatic detection or manual preset layout selection. Small terminals use Minimal; Git and project directories use Coding."}}
 		for _, name := range m.draft.MenuPresetOptions() {
 			mark := "[ ]"
-			if m.draft.MenuPresetMatches(name) {
+			if m.draft.ProfileSelection == "manual" && m.draft.SelectedProfile == "" && m.draft.MenuPresetMatches(name) {
 				mark = "[✓]"
 			}
 			description := "Apply this menu layout: visible items, detail switches and order. Theme and general settings stay unchanged."
@@ -452,7 +503,29 @@ func (m *model) rows() []row {
 			}
 			rows = append(rows, row{label: mark + " " + label, action: "preset", value: name, custom: name != "default", description: description})
 		}
-		return append(rows, row{label: "Save current menu as a layout…", action: "new-preset", description: "Save visible menu items, detail switches and order under a name; theme and general settings stay unchanged."})
+		rows = append(rows, row{label: "Save current menu as a layout…", action: "new-preset", description: "Save visible menu items, detail switches and order under a name; theme and general settings stay unchanged."})
+		rows = append(rows, row{label: markProfile("") + " " + m.tr("Current menu"), action: "profile", description: "Use the current menu without an automatic preset. Theme and appearance stay unchanged."})
+		for _, name := range config.ProfileNames {
+			description := "This preset layout will be defined later. Theme and appearance stay unchanged."
+			if name == "coding" {
+				description = "Coding shows project, runtime and command context in a compact menu. Automatic selection detects Git or project files. Theme stays unchanged."
+			} else if name == "minimal" {
+				description = "Minimal shows time, path and concise system values with a small pulse. Automatic selection uses it when the terminal is narrow or short. Theme stays unchanged."
+			} else if name == "presentation" {
+				description = "Presentation shows only date, time, uptime, CPU, memory and online status in the Shellux header. Select it manually before sharing your screen."
+			} else if name == "focus" {
+				description = "Focus shows CPU, memory, Spotify and playback progress. Choose a timer; a quiet gray block clock replaces the animation. The previous layout and theme return when time is up."
+				if remaining := m.draft.FocusRemaining(time.Now()); remaining > 0 {
+					description += fmt.Sprintf(" About %d minutes remaining.", int(remaining.Minutes()+0.999))
+				}
+			} else if name == "snapshot" {
+				description = "Snapshot captures a fixed diagnostic view for bug reports: time, Shellux version, system and resource status. Run shellux reload to capture again."
+			}
+			rows = append(rows,
+				row{label: markProfile(name) + " " + m.tr(profileLabel(name)), action: "profile", value: name, description: description},
+			)
+		}
+		return rows
 	case themesSection:
 		rows := []row{}
 		for _, t := range m.draft.ThemeOptions() {
@@ -541,6 +614,17 @@ func (m *model) moveRow(step int) {
 	}
 }
 
+func (m *model) moveLayoutColumn(right bool) {
+	leftCount := len(m.draft.MenuPresetOptions()) + 1 // saved layouts and Save
+	rightStart := leftCount + 1                       // Selection is the first row
+	selected := m.cursors[presetsSection]
+	if right && selected < rightStart {
+		m.cursors[presetsSection] = rightStart + min(max(0, selected-1), len(config.ProfileNames))
+	} else if !right && selected >= rightStart {
+		m.cursors[presetsSection] = 1 + min(selected-rightStart, leftCount-1)
+	}
+}
+
 func (m *model) selectMenuRow(action, value string) {
 	for index, candidate := range m.rows() {
 		if candidate.action == action && (candidate.value == value || candidate.entry.Key == value) {
@@ -624,9 +708,34 @@ func (m *model) activate() tea.Cmd {
 	case "preset":
 		if err := m.draft.ApplyMenuPreset(r.value); err != nil {
 			m.notice = friendly(err)
+		} else if err := m.draft.SelectProfile(""); err != nil {
+			m.notice = friendly(err)
 		}
 	case "new-preset":
 		return m.openInput("Save menu layout", "preset", "", "Name: a–z, 0–9 and hyphens, up to 32 characters")
+	case "profile":
+		name := r.value
+		if name == "focus" {
+			m.modal = &dialog{kind: "select", title: "Focus timer", field: "focus-duration", choices: []choice{
+				{label: "15 minutes", value: "15"}, {label: "25 minutes", value: "25"}, {label: "30 minutes", value: "30"},
+				{label: "45 minutes", value: "45"}, {label: "60 minutes", value: "60"}, {label: "Custom minutes…", value: "custom"},
+			}, selected: 2}
+			return nil
+		}
+		if name == m.draft.SelectedProfile {
+			name = ""
+		}
+		if err := m.draft.SelectProfile(name); err != nil {
+			m.notice = friendly(err)
+		}
+	case "profile-selection":
+		selection := "auto"
+		if m.draft.ProfileSelection == "auto" {
+			selection = "manual"
+		}
+		if err := m.draft.SetProfileSelection(selection); err != nil {
+			m.notice = friendly(err)
+		}
 	case "theme":
 		_, err := m.draft.ApplyTheme(r.value)
 		if err != nil {
@@ -724,6 +833,18 @@ func (m *model) updateDialog(msg tea.Msg) tea.Cmd {
 			d.selected = min(len(d.choices)-1, d.selected+1)
 		case "enter", "space":
 			value := d.choices[d.selected].value
+			if d.field == "focus-duration" {
+				if value == "custom" {
+					return m.openInput("Focus timer", "focus-duration", "30", "Minutes (1–240)")
+				}
+				minutes, _ := strconv.Atoi(value)
+				if err := m.draft.SetFocusDuration(minutes); err != nil {
+					d.error = friendly(err)
+				} else {
+					m.modal = nil
+				}
+				return nil
+			}
 			if d.field == "background" && value == "custom" {
 				return m.openInput("Custom RGB color", "background", "#", "#RRGGBB")
 			}
@@ -788,7 +909,16 @@ func (m *model) updateDialog(msg tea.Msg) tea.Cmd {
 func (m *model) confirmInput() bool {
 	d := m.modal
 	value := strings.TrimSpace(d.input.Value())
-	if d.field == "theme" {
+	if d.field == "focus-duration" {
+		minutes, err := strconv.Atoi(value)
+		if err == nil {
+			err = m.draft.SetFocusDuration(minutes)
+		}
+		if err != nil {
+			d.error = "Enter a duration from 1 to 240 minutes."
+			return false
+		}
+	} else if d.field == "theme" {
 		// Validate on a temporary copy before asking about an existing name.
 		test := m.draft.Clone()
 		name, err := test.StoreTheme(value)

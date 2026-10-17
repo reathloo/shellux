@@ -17,6 +17,7 @@ import (
 	"github.com/reathloo/shellux/internal/locale"
 	"github.com/reathloo/shellux/internal/systeminfo"
 	"github.com/reathloo/shellux/internal/theme"
+	"github.com/reathloo/shellux/internal/version"
 )
 
 const dashboardWidth = 52
@@ -29,7 +30,14 @@ type HeaderLayout struct {
 	DashboardWidth  int
 	DashboardColumn int
 	colors          theme.Theme
+	compact         bool
+	focus           bool
+	stacked         bool
 }
+
+// Stacked reports whether the dashboard is above the focus clock, sharing its
+// terminal region. Metric updates must repaint that whole region.
+func (layout HeaderLayout) Stacked() bool { return layout.stacked }
 
 // Height returns the number of terminal rows occupied by the header.
 func (layout HeaderLayout) Height() int {
@@ -39,6 +47,16 @@ func (layout HeaderLayout) Height() int {
 // Fit constrains a header to the visible terminal width. The dashboard is
 // hidden before it can wrap below the animation.
 func (layout HeaderLayout) Fit(columns int) HeaderLayout {
+	if layout.compact {
+		if columns > 0 {
+			layout.DashboardWidth = min(dashboardWidth, columns)
+			layout.Dashboard = slices.Clone(layout.Dashboard)
+			for index, value := range layout.Dashboard {
+				layout.Dashboard[index] = truncateStyledLine(value, columns)
+			}
+		}
+		return layout
+	}
 	if columns > 0 && layout.DashboardColumn+layout.DashboardWidth-1 > columns {
 		layout.Dashboard = nil
 		layout.DashboardWidth = 0
@@ -57,6 +75,33 @@ func (layout HeaderLayout) Fit(columns int) HeaderLayout {
 // always left for the prompt and its scrolling area, so a small terminal never
 // receives an invalid scrolling region below the visible screen.
 func (layout HeaderLayout) FitTerminal(columns, rows int) HeaderLayout {
+	if layout.focus && columns > 0 && columns < layout.DashboardColumn+layout.DashboardWidth-1 {
+		maxHeight := max(0, rows-2)
+		menu := make([]string, 0, len(layout.Dashboard))
+		for _, line := range layout.Dashboard {
+			menu = append(menu, truncateStyledLine(line, columns))
+		}
+		if len(menu) > maxHeight {
+			menu = menu[:maxHeight]
+		}
+		clock := layout.Eye[9:17] // The eight reference-font rows.
+		if len(menu)+1+len(clock) <= maxHeight {
+			menu = append(menu, "")
+			for _, line := range clock {
+				centered := strings.Repeat(" ", max(0, (columns-focusClockWidth)/2)) + line
+				menu = append(menu, truncateStyledLine(centered, columns))
+			}
+		}
+		layout.Eye = menu
+		layout.EyeWidth = 0
+		for _, line := range menu {
+			layout.EyeWidth = max(layout.EyeWidth, visibleWidth(line))
+		}
+		layout.Dashboard = nil
+		layout.DashboardWidth = 0
+		layout.stacked = true
+		return layout
+	}
 	layout = layout.Fit(columns)
 	if rows <= 2 {
 		layout.Eye = nil
@@ -113,11 +158,19 @@ func NewHeaderLayoutWithConfig(snapshot systeminfo.Snapshot, eye string, colors 
 	}
 	snapshot.Memory.Pressure = lang.Text(snapshot.Memory.Pressure)
 	snapshot.Temperature.State = lang.Text(snapshot.Temperature.State)
+	if settings.RuntimeProfile == "minimal" {
+		return newMinimalLayout(snapshot, eye, colors, settings, lang)
+	}
 	show := func(name string) bool {
 		return config.Shown(settings.Visible, name)
 	}
 
 	dashboard := []string{dashboardTitle(colors, snapshot.Now, show("time"))}
+	if settings.RuntimeProfile == "snapshot" {
+		dashboard = []string{colors.Accent + "S H E L L U X  ·  SNAPSHOT" + colors.Reset,
+			dashboardItem(colors, "captured", snapshot.Now.Format("2006-01-02 15:04:05 -07:00")),
+			dashboardItem(colors, "shellux", version.String())}
+	}
 	appendSection := func(title string, items []string) {
 		if len(items) > 0 {
 			dashboard = append(dashboard, "", sectionStart(colors, lang.Text(title)))
@@ -161,7 +214,25 @@ func NewHeaderLayoutWithConfig(snapshot systeminfo.Snapshot, eye string, colors 
 		DashboardWidth:  dashboardWidth,
 		DashboardColumn: eyeWidth + 6,
 		colors:          colors,
+		focus:           settings.RuntimeProfile == "focus",
 	}
+}
+
+func newMinimalLayout(snapshot systeminfo.Snapshot, pulse string, colors theme.Theme, settings config.Config, lang locale.Language) HeaderLayout {
+	title := colors.Accent + pulse + " Shellux" + colors.Reset
+	if config.Shown(settings.Visible, "time") {
+		title += "  " + colors.Secondary + snapshot.Now.Format("15:04") + colors.Reset
+	}
+	lines := []string{title}
+	for _, entry := range settings.OrderedMenuEntries() {
+		if entry.Group == "HEADER" {
+			continue
+		}
+		for _, item := range dashboardEntry(snapshot, settings, entry, lang) {
+			lines = append(lines, colors.Secondary+strings.ToUpper(lang.Text(item.label))+colors.Reset+" "+item.value)
+		}
+	}
+	return HeaderLayout{Dashboard: lines, DashboardWidth: dashboardWidth, DashboardColumn: 1, colors: colors, compact: true}
 }
 
 func dashboardTitle(colors theme.Theme, now time.Time, showTime bool) string {
@@ -224,6 +295,87 @@ func dashboardEntry(snapshot systeminfo.Snapshot, settings config.Config, entry 
 		return []dashboardValue{{dashboardLabel(entry), strings.Join(values, separator)}}
 	}
 	switch entry.Key {
+	case "git-branch":
+		values := make([]string, 0, len(parts))
+		for _, part := range parts {
+			switch part {
+			case "branch":
+				values = append(values, availableText(snapshot.Coding.Branch))
+			case "repository":
+				values = append(values, "repo "+availableText(snapshot.Coding.Repository))
+			}
+		}
+		return join(values, " · ")
+	case "git-sync":
+		if !snapshot.Coding.SyncAvailable {
+			return join([]string{"N/A"}, "")
+		}
+		values := make([]string, 0, len(parts))
+		for _, part := range parts {
+			if part == "ahead" {
+				values = append(values, fmt.Sprintf("↑%d", snapshot.Coding.Ahead))
+			} else if part == "behind" {
+				values = append(values, fmt.Sprintf("↓%d", snapshot.Coding.Behind))
+			}
+		}
+		return join(values, " · ")
+	case "runtimes":
+		values := make([]string, 0, len(parts))
+		for _, part := range parts {
+			version := ""
+			label := ""
+			switch part {
+			case "go":
+				version = snapshot.Coding.Go
+				label = "Go"
+			case "node":
+				version = snapshot.Coding.Node
+				label = "Node"
+			case "python":
+				version = snapshot.Coding.Python
+				label = "Python"
+			case "java":
+				version = snapshot.Coding.Java
+				label = "Java"
+			}
+			values = append(values, label+" "+availableText(version))
+		}
+		rows := make([]dashboardValue, 0, (len(values)+1)/2)
+		for i := 0; i < len(values); i += 2 {
+			label := entry.Name
+			if i > 0 {
+				label = "  ↳"
+			}
+			rows = append(rows, dashboardValue{label, strings.Join(values[i:min(i+2, len(values))], " · ")})
+		}
+		return rows
+	case "dev-context":
+		values := make([]string, 0, len(parts))
+		for _, part := range parts {
+			if part == "docker" {
+				values = append(values, "Docker "+availableText(snapshot.Coding.Docker))
+			} else if part == "kubernetes" {
+				values = append(values, "K8s "+availableText(snapshot.Coding.Kubernetes))
+			}
+		}
+		return join(values, " · ")
+	case "last-command":
+		if !snapshot.Coding.CommandAvailable {
+			return join([]string{"N/A"}, "")
+		}
+		values := make([]string, 0, len(parts))
+		for _, part := range parts {
+			if part == "duration" {
+				elapsed := "<1s"
+				if snapshot.Coding.CommandSeconds > 0 {
+					elapsed = (time.Duration(snapshot.Coding.CommandSeconds) * time.Second).String()
+				}
+				values = append(values, elapsed)
+			} else if part == "exit" {
+				values = append(values, fmt.Sprintf("exit %d", snapshot.Coding.CommandExit))
+			}
+		}
+		return join(values, " · ")
 	case "load-average":
 		if !snapshot.Load.Available {
 			return join([]string{"N/A"}, "")
@@ -276,6 +428,9 @@ func dashboardEntry(snapshot systeminfo.Snapshot, settings config.Config, entry 
 		}
 		return join(values, " · ")
 	case "platform":
+		if settings.RuntimeProfile == "snapshot" {
+			return join([]string{snapshot.System.Platform + " · " + snapshot.System.Architecture}, "")
+		}
 		return join([]string{snapshot.System.Platform + " · " + snapshot.System.Architecture + " · " + snapshot.System.Hostname}, "")
 	case "shell":
 		return join([]string{snapshot.System.Shell + " · " + snapshot.System.Terminal}, "")

@@ -45,6 +45,47 @@ shellux settings
 Explore **Menu items**, **Menu layouts**, **Themes**, **Appearance**, **General**,
 and **Doctor** to choose what appears, save menu presets, select themes, set custom
 colors, and change the refresh interval.
+**Menu layouts** shows saved layouts and preset layouts in two columns. The
+selection above them switches between automatic detection and manual choice.
+**Coding**, **Minimal**, **Presentation**, **Focus** and **Snapshot** are working presets;
+SSH / Remote remains a placeholder. Manual selection works in any directory. Automatic Coding
+activates inside a Git repository or a project containing `go.mod`,
+`package.json`, `pyproject.toml`, `Cargo.toml`, `pom.xml`, or a Gradle build file.
+Changing directories into or out of a Coding project refreshes the header in
+the sourced shell. Docker and Kubernetes contexts are displayed when their
+tools are available, but do not trigger Coding. Git details appear inside Git
+repositories; installed runtimes and the last shell command appear when their
+data is available. Coding temporarily uses a compact menu with the CODING
+section first. Its selection never changes the chosen theme, animation, style
+or background. The saved menu returns when Coding is no longer active.
+Automatic Minimal takes precedence when the terminal is narrower than 110
+columns or shorter than 18 rows. It shows time, path, optional Git branch,
+CPU and memory in a compact list with a small pulsing indicator. The selected
+theme remains saved and the usual layout returns as soon as there is room.
+Presentation is selected manually before screen sharing or recording. Its
+Shellux header shows only date, time, uptime, CPU and memory percentages, and
+connected/disconnected status. It hides paths, host and network names, IPs,
+Git and tool context, logged-in users, and media metadata. The selected theme
+stays unchanged. This controls the Shellux header; your shell prompt and
+existing terminal output can still contain private information.
+Snapshot is selected manually for bug diagnosis. It captures the current time,
+Shellux version, platform, shell, uptime, CPU, memory, load and connection
+status in a fixed header. Hostname, path, IP and media details are hidden by
+the preset. The values and animation stay still until `shellux reload` captures
+a new view. The selected theme stays unchanged. This is a local display, not
+an automatically shared bug report.
+Focus is selected manually in **Menu layouts**. Choose 15, 25, 30, 45 or 60
+minutes, or enter a custom duration from 1 to 240 minutes. During the session,
+CPU and memory percentages, Spotify and playback progress remain in the usual
+dashboard column. The shaded ASCII clock uses the supplied `#`, `/`, `\\`, `_`
+and `|` font in the same 51×26 canvas as other animations. Below one hour it
+shows minutes and seconds; from one hour onward it shows hours and minutes.
+The colon stays still and there are no additional labels. When the terminal is
+too narrow for both columns, the dashboard moves above the centered clock.
+The terminal background is black and the header text is white. When the timer
+expires, Shellux restores the previous layout selection and the saved theme.
+Selecting another layout ends the session early. The timer is saved with an
+absolute deadline, so reopening the terminal does not restart it.
 **Doctor** checks the installed Zsh/Bash integration, downloaded theme packages,
 owner permissions on Shellux files, and orphaned live-renderer processes. Scanning
 does not change anything or access the network. A repair is offered only when
@@ -70,6 +111,15 @@ Further optional resource rows show the 1/5/15-minute load averages, used/free
 swap, and the GPU model/core count reported by macOS. GPU utilization is not
 estimated; unavailable hardware details show `N/A`. The volume row also has
 an independent, default-off switch for remaining free space.
+The **CODING** section contains five default-off rows: Git branch/repository,
+ahead/behind counts against the locally configured upstream, Go/Node/Python/Java
+versions, Docker/Kubernetes contexts, and the last command's duration/exit code.
+Each row has independent detail switches. Git comparisons use local refs and do
+not fetch; missing tools, repositories, upstreams, or shell command data show
+`N/A`. Shellux collects these values only when their rows are enabled. Last
+command duration has whole-second resolution and requires the sourced Zsh/Bash
+integration; the header still waits for an explicit reload after normal command
+output.
 Under **General → Language**, choose **Automatic (system)**, **English**, or
 **Deutsch** for the dashboard and settings. Automatic uses the system/terminal
 locale, with English as the fallback for other languages. Commands stay unchanged.

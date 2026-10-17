@@ -123,7 +123,11 @@ def check_shell(shell):
             resize(140, 40)
             drain(0.2)
             command("PS1=$'SX\\x3e '; PS2='MORE> '; source " + str(REPO / ("shell/shellux." + shell)))
-            assert renderers() == 1
+            assert renderers() == 1, (shell, "startup renderer", renderers(), bytes(raw)[-400:])
+            command("false")
+            completion = command("printf 'LAST=%s:%s\\n' \"$SHELLUX_LAST_COMMAND_STATUS\" \"$SHELLUX_LAST_COMMAND_SECONDS\"")
+            assert re.search(rb"LAST=1:[0-9]+", completion), (shell, "last command data", completion[-300:])
+            command("shellux reload")
             # Open from a visible header, cancel without reload or config write.
             start, before = open_ui()
             output = close_ui(b"\x1b", len(raw), before, 0)
@@ -224,7 +228,7 @@ def check_shell(shell):
             assert json.loads(config_path.read_bytes())["themes"]["my-ui-theme"]["background"] == "#123456"
             # Save the current menu independently of the selected theme.
             start, before = open_ui()
-            os.write(fd, b"\x1b[B\r\x1b[B\r")  # Menu layouts -> save current
+            os.write(fd, b"\x1b[B\r" + b"\x1b[B" * 2 + b"\r")  # Menu layouts -> save current
             drain(0.1)
             os.write(fd, b"my-menu\r")
             drain(0.1)
@@ -354,7 +358,7 @@ def check_shell(shell):
             assert layout["items"]["RESOURCES"][:2] == ["cpu", "cores"], layout["items"]["RESOURCES"]
             # Reapply the saved menu, then delete only its saved copy.
             start, before = open_ui()
-            os.write(fd, b"\x1b[B\r\x1b[B\r")  # Menu layouts -> my-menu
+            os.write(fd, b"\x1b[B\r" + b"\x1b[B" * 2 + b"\r")  # Menu layouts -> my-menu
             drain(0.2)
             close_ui(b"\x13", len(raw), before, 1)
             applied = json.loads(config_path.read_bytes())
@@ -362,7 +366,7 @@ def check_shell(shell):
             assert applied["visible"]["shell"] is True and applied["visible"]["date"] is False
             assert applied["style"] == "neon" and applied["themes"]["my-ui-theme"]["background"] == "#123456"
             start, before = open_ui()
-            os.write(fd, b"\x1b[B\r\x1b[B\x1b[3~")  # select my-menu, Delete
+            os.write(fd, b"\x1b[B\r" + b"\x1b[B" * 2 + b"\x1b[3~")  # select my-menu, Delete
             drain(0.1)
             os.write(fd, b"\x1b[C\r")  # confirm deletion
             drain(0.1)

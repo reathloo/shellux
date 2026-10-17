@@ -79,6 +79,15 @@ func main() {
 		fmt.Fprintf(os.Stderr, "shellux: load config: %v\n", err)
 		os.Exit(2)
 	}
+	baseSettings := settings
+	if directory, err := os.Getwd(); err == nil {
+		rows, columns, sizeErr := profileTerminalSize()
+		if sizeErr == nil {
+			settings = settings.EffectiveProfile(directory, columns, rows)
+		} else {
+			settings = settings.EffectiveProfile(directory)
+		}
+	}
 	animationSet := false
 	styleSet := false
 	intervalSet := false
@@ -121,10 +130,13 @@ func main() {
 		fmt.Fprintf(os.Stderr, "shellux: %v\n", err)
 		os.Exit(2)
 	}
+	if settings.RuntimeProfile == "focus" {
+		selectedStyle = theme.Focus()
+	}
 
 	emitBackground(settings.Background)
 	if *watch {
-		watchHeader(*interval, settings, *inPlace, *parentPID, selectedAnimation, selectedStyle, locale.Resolve(settings.Language))
+		watchHeader(*interval, settings, baseSettings, *inPlace, *parentPID, selectedAnimation, selectedStyle, locale.Resolve(settings.Language))
 		return
 	}
 
@@ -135,7 +147,13 @@ func main() {
 	}
 	var trends systeminfo.TrendRecorder
 	snapshot.Trends = trends.Observe(snapshot)
-	layout := render.NewHeaderLayoutWithConfig(snapshot, animation.Frame(selectedAnimation, 0), selectedStyle, settings, locale.Resolve(settings.Language))
+	eye := animation.Frame(selectedAnimation, 0)
+	if settings.RuntimeProfile == "minimal" {
+		eye = "•"
+	} else if settings.RuntimeProfile == "focus" {
+		eye = render.FocusClock(baseSettings.FocusRemaining(time.Now()))
+	}
+	layout := render.NewHeaderLayoutWithConfig(snapshot, eye, selectedStyle, settings, locale.Resolve(settings.Language))
 	if *reserveHeader {
 		if rows, columns, sizeErr := terminal.Size(os.Stdout.Fd()); sizeErr == nil {
 			layout = layout.FitTerminal(columns, rows)
@@ -165,6 +183,28 @@ func runCommand(args []string) bool {
 		return false
 	}
 	switch args[0] {
+	case "profile":
+		if len(args) != 2 || args[1] != "resolve" {
+			commandUsage("shellux profile resolve")
+		}
+		settings, err := config.LoadDefault()
+		if err != nil {
+			commandError("resolve profile", err)
+		}
+		directory, err := os.Getwd()
+		if err != nil {
+			commandError("resolve profile", err)
+		}
+		rows, columns, sizeErr := profileTerminalSize()
+		profile := settings.ActiveProfile(directory)
+		if sizeErr == nil {
+			profile = settings.ActiveProfile(directory, columns, rows)
+		}
+		if profile == "" {
+			profile = "standard"
+		}
+		fmt.Println(profile)
+		return true
 	case "settings":
 		if len(args) != 1 {
 			commandUsage("shellux settings (no additional arguments)")
@@ -174,6 +214,9 @@ func runCommand(args []string) bool {
 			fmt.Fprintf(os.Stderr, "shellux: settings: %v\n", err)
 		}
 		if code == settingsui.Saved {
+			if directory, err := os.Getwd(); err == nil {
+				settings = settings.EffectiveProfile(directory)
+			}
 			emitBackground(settings.Background)
 		}
 		if code != 0 {
@@ -442,7 +485,7 @@ func menuReport(settings config.Config) string {
 
 const commandHelp = `Shellux commands:
   shellux settings               visual settings menu (interactive terminal)
-                                  Menu layouts: save, apply, delete menu presets
+                                  Menu layouts: saved and preset layouts, automatic or manual
                                   Tab: focus, arrows: select, Space: toggle
                                   M: move mode; Up/Down: section/item
                                   Left/Right: component, Enter: done
@@ -572,6 +615,18 @@ func loadSettings(path string) (config.Config, error) {
 	return config.LoadDefault()
 }
 
+func profileTerminalSize() (rows, columns int, err error) {
+	if rows, columns, err = terminal.Size(os.Stdout.Fd()); err == nil {
+		return rows, columns, nil
+	}
+	tty, openErr := os.Open("/dev/tty")
+	if openErr != nil {
+		return 0, 0, err
+	}
+	defer tty.Close()
+	return terminal.Size(tty.Fd())
+}
+
 func animationByName(name string) animation.Animation {
 	if name != "shelluxdefault" {
 		if p, err := themepack.LoadName(name); err == nil {
@@ -590,8 +645,10 @@ func isAnimation(name string) bool {
 	return false
 }
 
-func watchHeader(interval time.Duration, settings config.Config, inPlace bool, parentPID int, selectedAnimation animation.Animation, selectedStyle theme.Theme, language locale.Language) {
+func watchHeader(interval time.Duration, settings, baseSettings config.Config, inPlace bool, parentPID int, selectedAnimation animation.Animation, selectedStyle theme.Theme, language locale.Language) {
 	visible := settings.Visible
+	baseStyle, _ := theme.ByName(baseSettings.Style)
+	var profileMu sync.RWMutex
 	signalContext, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	ctx, cancel := context.WithCancel(signalContext)
@@ -612,32 +669,73 @@ func watchHeader(interval time.Duration, settings config.Config, inPlace bool, p
 	}
 
 	frame := 0
+	lastFocusClock := ""
 	var snapshot systeminfo.Snapshot
+	snapshotCaptured := false
 	var trends systeminfo.TrendRecorder
 	var snapshotMu sync.RWMutex
 	columns := 0
 	rows := 0
+	directory, _ := os.Getwd()
+	sizeInitialized := false
 	refreshSize := func() bool {
 		if updatedRows, updatedColumns, err := terminal.Size(os.Stdout.Fd()); err == nil {
 			changed := (columns > 0 && updatedColumns != columns) || (rows > 0 && updatedRows != rows)
 			rows = updatedRows
 			columns = updatedColumns
+			if changed || !sizeInitialized {
+				previousProfile := settings.RuntimeProfile
+				settings = baseSettings.EffectiveProfile(directory, columns, rows)
+				if previousProfile == "focus" && settings.RuntimeProfile != "focus" {
+					selectedStyle = baseStyle
+					emitBackground(settings.Background)
+				}
+				profileMu.Lock()
+				visible = settings.Visible
+				profileMu.Unlock()
+				sizeInitialized = true
+			}
 			return changed
 		}
 		return false
 	}
 	refreshSize()
+	refreshFocus := func() bool {
+		if settings.RuntimeProfile != "focus" || baseSettings.ActiveProfile(directory, columns, rows) == "focus" {
+			return false
+		}
+		settings = baseSettings.EffectiveProfile(directory, columns, rows)
+		profileMu.Lock()
+		visible = settings.Visible
+		profileMu.Unlock()
+		selectedStyle = baseStyle
+		emitBackground(settings.Background)
+		return true
+	}
 	layoutForFrame := func() render.HeaderLayout {
 		snapshotMu.RLock()
 		currentSnapshot := snapshot
 		snapshotMu.RUnlock()
-		layout := render.NewHeaderLayoutWithConfig(currentSnapshot, animation.Frame(selectedAnimation, frame), selectedStyle, settings, language)
+		eye := animation.Frame(selectedAnimation, frame)
+		if settings.RuntimeProfile == "minimal" {
+			if frame%2 == 0 {
+				eye = "•"
+			} else {
+				eye = "·"
+			}
+		} else if settings.RuntimeProfile == "focus" {
+			eye = render.FocusClock(baseSettings.FocusRemaining(time.Now()))
+		}
+		layout := render.NewHeaderLayoutWithConfig(currentSnapshot, eye, selectedStyle, settings, language)
 		if inPlace {
 			layout = layout.FitTerminal(columns, rows)
 		}
 		return layout
 	}
 	renderCompleteHeader := func(layout render.HeaderLayout) string {
+		if settings.RuntimeProfile == "focus" {
+			lastFocusClock = strings.Join(layout.Eye, "\n")
+		}
 		clearHeight := max(reservedHeight, layout.Height())
 		output := terminal.MaintainHeader(layout.Height()) + terminal.ClearRows(clearHeight)
 		output += terminal.Region(layout.EyeRegion(), 1, 1, layout.EyeWidth)
@@ -653,7 +751,13 @@ func watchHeader(interval time.Duration, settings config.Config, inPlace bool, p
 		MetricsInterval:   interval,
 		Output:            os.Stdout,
 		UpdateMetrics: func() error {
-			updated, err := systeminfo.SnapshotInfoWithDisplay(visible)
+			if settings.RuntimeProfile == "snapshot" && snapshotCaptured {
+				return nil
+			}
+			profileMu.RLock()
+			currentVisible := visible
+			profileMu.RUnlock()
+			updated, err := systeminfo.SnapshotInfoWithDisplay(currentVisible)
 			if err != nil {
 				return err
 			}
@@ -661,13 +765,21 @@ func watchHeader(interval time.Duration, settings config.Config, inPlace bool, p
 			snapshotMu.Lock()
 			snapshot = updated
 			snapshotMu.Unlock()
+			if settings.RuntimeProfile == "snapshot" {
+				snapshotCaptured = true
+			}
 			return nil
 		},
 		AdvanceAnimation: func() {
-			frame++
+			if settings.RuntimeProfile != "snapshot" && settings.RuntimeProfile != "focus" {
+				frame++
+			}
 		},
 		RenderInitial: func() (string, error) {
 			layout := layoutForFrame()
+			if settings.RuntimeProfile == "focus" {
+				lastFocusClock = strings.Join(layout.Eye, "\n")
+			}
 			reservedHeight = layout.Height()
 			if inPlace {
 				return terminal.MaintainHeader(layout.Height()) +
@@ -679,31 +791,59 @@ func watchHeader(interval time.Duration, settings config.Config, inPlace bool, p
 		},
 		RenderAnimation: func() (string, error) {
 			resized := inPlace && refreshSize()
+			focusEnded := refreshFocus()
 			layout := layoutForFrame()
-			if resized {
+			if resized || focusEnded {
 				return renderCompleteHeader(layout), nil
+			}
+			if settings.RuntimeProfile == "snapshot" {
+				return "", nil
+			}
+			if settings.RuntimeProfile == "focus" {
+				clock := strings.Join(layout.Eye, "\n")
+				if clock == lastFocusClock {
+					return "", nil
+				}
+				lastFocusClock = clock
+				prefix := ""
+				if inPlace {
+					prefix = terminal.MaintainHeader(layout.Height())
+				}
+				return prefix + terminal.Region(layout.EyeRegion(), 1, 1, layout.EyeWidth), nil
 			}
 			prefix := ""
 			if inPlace {
 				prefix = terminal.MaintainHeader(layout.Height())
+			}
+			if settings.RuntimeProfile == "minimal" {
+				return prefix + terminal.Region(layout.Dashboard, 1, layout.DashboardColumn, layout.DashboardWidth), nil
 			}
 			return prefix + terminal.Region(layout.EyeRegion(), 1, 1, layout.EyeWidth) + headerGutter(layout), nil
 		},
 		RenderMetrics: func() (string, error) {
 			resized := inPlace && refreshSize()
+			focusEnded := refreshFocus()
 			layout := layoutForFrame()
-			if resized {
+			if resized || focusEnded {
 				return renderCompleteHeader(layout), nil
+			}
+			if settings.RuntimeProfile == "snapshot" {
+				return "", nil
 			}
 			prefix := ""
 			if inPlace {
 				prefix = terminal.MaintainHeader(layout.Height())
+			}
+			if layout.Stacked() {
+				lastFocusClock = strings.Join(layout.Eye, "\n")
+				return prefix + terminal.Region(layout.EyeRegion(), 1, 1, layout.EyeWidth), nil
 			}
 			return prefix + headerGutter(layout) + terminal.Region(layout.Dashboard, 1, layout.DashboardColumn, layout.DashboardWidth), nil
 		},
 		ResizeEvents: resizeEvents,
 		RenderResize: func() (string, error) {
 			refreshSize()
+			refreshFocus()
 			layout := layoutForFrame()
 			return renderCompleteHeader(layout), nil
 		},

@@ -28,6 +28,11 @@ var entryHelp = map[string]helpText{
 	"disk-io":         {"Shows physical block-device read and write throughput since the previous sample.", "Zeigt Lese- und Schreibdurchsatz physischer Blockgeräte seit der letzten Messung."},
 	"battery":         {"Shows or hides battery information. Battery and thermal state share one dashboard row.", "Blendet Batterieinformationen ein oder aus. Batterie und Thermik teilen eine Dashboard-Zeile."},
 	"temperature":     {"Shows the system thermal-pressure state. With battery enabled, both appear on one row.", "Zeigt den thermischen Belastungszustand. Mit aktiver Batterie erscheinen beide in einer Zeile."},
+	"git-branch":      {"Shows the current Git branch and repository in this shell's directory.", "Zeigt den aktuellen Git-Branch und das Repository im Verzeichnis dieser Shell."},
+	"git-sync":        {"Shows commits ahead of and behind the configured upstream branch; no network request is made.", "Zeigt Commits vor und hinter dem konfigurierten Upstream-Branch; es erfolgt keine Netzwerkanfrage."},
+	"runtimes":        {"Shows installed Go, Node, Python and Java versions reported by their commands.", "Zeigt die von den Befehlen gemeldeten Go-, Node-, Python- und Java-Versionen."},
+	"dev-context":     {"Shows the selected local Docker and Kubernetes contexts without contacting a server.", "Zeigt die lokal gewählten Docker- und Kubernetes-Kontexte ohne Serverkontakt."},
+	"last-command":    {"Shows duration and exit code of the last non-Shellux command from the sourced shell.", "Zeigt Dauer und Exit-Code des letzten Befehls außerhalb von Shellux aus der eingebundenen Shell."},
 	"directory":       {"Shows the current working directory, shortened to fit the dashboard.", "Zeigt das aktuelle Arbeitsverzeichnis, passend zur Dashboard-Breite gekürzt."},
 	"spotify":         {"Shows artist and title from the Spotify desktop app, or that nothing is playing.", "Zeigt Interpret und Titel aus der Spotify-Desktop-App oder dass nichts wiedergegeben wird."},
 	"progress":        {"Shows playback state, elapsed time and song progress for Spotify.", "Zeigt Wiedergabestatus, vergangene Zeit und Songfortschritt von Spotify."},
@@ -36,6 +41,28 @@ var entryHelp = map[string]helpText{
 }
 
 var componentHelp = map[string]map[string]helpText{
+	"git-branch": {
+		"branch":     {"Shows the current branch, or a short commit ID when HEAD is detached.", "Zeigt den aktuellen Branch oder bei gelöstem HEAD eine kurze Commit-ID."},
+		"repository": {"Shows the Git repository folder name.", "Zeigt den Ordnernamen des Git-Repositories."},
+	},
+	"git-sync": {
+		"ahead":  {"Shows local commits not in the configured upstream branch.", "Zeigt lokale Commits, die im konfigurierten Upstream-Branch fehlen."},
+		"behind": {"Shows upstream commits missing locally; this uses local refs only.", "Zeigt Upstream-Commits, die lokal fehlen; dafür werden nur lokale Referenzen genutzt."},
+	},
+	"runtimes": {
+		"go":     {"Shows the active Go command version.", "Zeigt die Version des aktiven Go-Befehls."},
+		"node":   {"Shows the active Node command version.", "Zeigt die Version des aktiven Node-Befehls."},
+		"python": {"Shows the active Python 3 command version.", "Zeigt die Version des aktiven Python-3-Befehls."},
+		"java":   {"Shows the active Java command version.", "Zeigt die Version des aktiven Java-Befehls."},
+	},
+	"dev-context": {
+		"docker":     {"Shows the local Docker context selection.", "Zeigt den lokal gewählten Docker-Kontext."},
+		"kubernetes": {"Shows the current kubectl context from local configuration.", "Zeigt den aktuellen kubectl-Kontext aus der lokalen Konfiguration."},
+	},
+	"last-command": {
+		"duration": {"Shows elapsed whole seconds; commands under one second appear as <1s.", "Zeigt vergangene volle Sekunden; Befehle unter einer Sekunde erscheinen als <1s."},
+		"exit":     {"Shows the exit code of the last command in this shell.", "Zeigt den Exit-Code des letzten Befehls in dieser Shell."},
+	},
 	"load-average": {
 		"one":     {"Shows the one-minute runnable-task average.", "Zeigt den Mittelwert ausführbarer Aufgaben über eine Minute."},
 		"five":    {"Shows the five-minute runnable-task average.", "Zeigt den Mittelwert ausführbarer Aufgaben über fünf Minuten."},

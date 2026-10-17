@@ -27,6 +27,7 @@ type Snapshot struct {
 	Now         time.Time
 	Timezone    string
 	Trends      Trends
+	Coding      Coding
 }
 
 // SnapshotInfo collects all header data. Optional sensors remain unavailable
@@ -101,6 +102,7 @@ func SnapshotInfoWithDisplay(visible map[string]bool) (Snapshot, error) {
 	if config.EntryShown(visible, "network-status") && (config.Shown(visible, "network-status.connection") || config.Shown(visible, "network-status.name")) {
 		network.Connection, network.Name = connectionDetails(network.Interface, config.Shown(visible, "network-status.name"))
 	}
+	coding := CodingInfo(visible, directory)
 	latencyEnabled := config.EntryShown(visible, "network-traffic") && config.Shown(visible, "network-traffic.latency")
 	lossEnabled := config.EntryShown(visible, "packet-loss")
 	if network.Connected && (latencyEnabled || lossEnabled) {
@@ -137,5 +139,6 @@ func SnapshotInfoWithDisplay(visible map[string]bool) (Snapshot, error) {
 		Directory:   directory,
 		Now:         now,
 		Timezone:    timezone,
+		Coding:      coding,
 	}, nil
 }

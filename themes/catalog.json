@@ -28,6 +28,45 @@
       }
     },
     {
+      "name": "cryingking",
+      "version": "1.0.0",
+      "size": 154983,
+      "sha256": "a20e22ff487e2cc8cb583e201e3dfb06bc00f969389841756648e6601a367b0e",
+      "package": "packages/cryingking-1.0.0.shellux-theme",
+      "background": "#2c0d18",
+      "style": {
+        "secondary": "#78baff",
+        "accent": "#ffe38a",
+        "muted": "#c8a453"
+      }
+    },
+    {
+      "name": "dancingpingu",
+      "version": "1.0.1",
+      "size": 54189,
+      "sha256": "dd2727ccc6dd20bb00b152552c2124e246b214c56afd32c4c2d9d143d37b61d9",
+      "package": "packages/dancingpingu-1.0.1.shellux-theme",
+      "background": "#0b1733",
+      "style": {
+        "secondary": "#ffc6f3",
+        "accent": "#9bd4ff",
+        "muted": "#8fc8f4"
+      }
+    },
+    {
+      "name": "happycatus",
+      "version": "1.0.1",
+      "size": 22124,
+      "sha256": "1da5f59a7a2530c346e48d0e9a3cbb2b17daeda589bc932c5b078175b693c114",
+      "package": "packages/happycatus-1.0.1.shellux-theme",
+      "background": "#1a1020",
+      "style": {
+        "secondary": "#b8e58b",
+        "accent": "#ffd36a",
+        "muted": "#ab8ca6"
+      }
+    },
+    {
       "name": "heart",
       "version": "1.0.0",
       "size": 1370,
@@ -120,10 +159,10 @@
     },
     {
       "name": "sleepyguy",
-      "version": "1.0.0",
-      "size": 6993,
-      "sha256": "04089093b7e19beaef9573db43586d4f0b7b865aee4f096a9b015f35b5834c47",
-      "package": "packages/sleepyguy-1.0.0.shellux-theme",
+      "version": "1.0.1",
+      "size": 7101,
+      "sha256": "8d3fbb0c5c30ea3533cb1650b54ab871af2e695379d9db5e8831d98eb9f7ab13",
+      "package": "packages/sleepyguy-1.0.1.shellux-theme",
       "background": "#120f12",
       "style": {
         "secondary": "#d0a3a3",

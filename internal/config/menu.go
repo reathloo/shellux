@@ -31,6 +31,11 @@ var menuItems = []struct {
 	{"disk-io", "disk I/O", "RESOURCES", false, true},
 	{"battery", "battery", "RESOURCES", true, true},
 	{"temperature", "thermal", "RESOURCES", false, false},
+	{"git-branch", "branch", "CODING", false, true},
+	{"git-sync", "git sync", "CODING", false, true},
+	{"runtimes", "runtimes", "CODING", false, true},
+	{"dev-context", "contexts", "CODING", false, true},
+	{"last-command", "last cmd", "CODING", false, true},
 	{"directory", "path", "SESSION", true, false},
 	{"spotify", "spotify", "SESSION", true, false},
 	{"progress", "progress", "SESSION", true, false},
@@ -102,6 +107,19 @@ func completeMenuLayout(layout MenuLayout) MenuLayout {
 	defaults := defaultMenuLayout()
 	if len(layout.Groups) == 0 {
 		layout.Groups = defaults.Groups
+	}
+	for index, group := range defaults.Groups {
+		if slices.Contains(layout.Groups, group) {
+			continue
+		}
+		position := len(layout.Groups)
+		for _, following := range defaults.Groups[index+1:] {
+			if existing := slices.Index(layout.Groups, following); existing >= 0 {
+				position = existing
+				break
+			}
+		}
+		layout.Groups = slices.Insert(layout.Groups, position, group)
 	}
 	if layout.Items == nil {
 		layout.Items = map[string][]string{}
@@ -297,6 +315,16 @@ func DisplayParts(name string) []string {
 		return []string{"count", "names"}
 	case "media-activity":
 		return []string{"microphone", "camera"}
+	case "git-branch":
+		return []string{"branch", "repository"}
+	case "git-sync":
+		return []string{"ahead", "behind"}
+	case "runtimes":
+		return []string{"go", "node", "python", "java"}
+	case "dev-context":
+		return []string{"docker", "kubernetes"}
+	case "last-command":
+		return []string{"duration", "exit"}
 	}
 	for _, item := range menuItems {
 		if item.name == name && item.parts {
@@ -353,6 +381,9 @@ func PartLabel(name, part string) string {
 		"read": "Read", "write": "Write", "samples": "Samples",
 		"count": "Count", "names": "Users", "microphone": "Microphone", "camera": "Camera",
 		"one": "1 min", "five": "5 min", "fifteen": "15 min", "cores": "Cores",
+		"branch": "Branch", "repository": "Repository", "ahead": "Ahead", "behind": "Behind",
+		"go": "Go", "node": "Node", "python": "Python", "java": "Java",
+		"docker": "Docker", "kubernetes": "Kubernetes", "duration": "Duration", "exit": "Exit code",
 	}
 	return labels[part]
 }

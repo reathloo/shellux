@@ -54,6 +54,13 @@ func ShelluxDefault() Theme {
 	return newTheme(ansi.RGBColor{R: 217, G: 164, B: 65}, ansi.RGBColor{R: 255, G: 240, B: 166}, ansi.RGBColor{R: 159, G: 132, B: 82}, false)
 }
 
+// Focus uses a restrained monochrome palette on a black terminal background.
+func Focus() Theme {
+	white := ansi.RGBColor{R: 255, G: 255, B: 255}
+	muted := ansi.RGBColor{R: 170, G: 170, B: 170}
+	return newTheme(white, white, muted, false)
+}
+
 // RainbowColors is shared by the header and the settings headings.
 func RainbowColors() []ansi.Color {
 	return []ansi.Color{ansi.IndexedColor(196), ansi.IndexedColor(214), ansi.IndexedColor(226), ansi.IndexedColor(46), ansi.IndexedColor(51), ansi.IndexedColor(27), ansi.IndexedColor(201)}

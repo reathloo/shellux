@@ -30,7 +30,7 @@ if [[ "$1" == bash ]]; then
   PROMPT_COMMAND=(foreign_prompt_one foreign_prompt_two)
   shellux_integration_version=19
   source "shell/shellux.bash"
-  equal "$shellux_integration_version" 20 'existing Bash integration upgrades'
+  equal "$shellux_integration_version" 25 'existing Bash integration upgrades'
   eval "${PROMPT_COMMAND[0]}"
   equal "$shellux_previous_debug_trap" foreign_debug_hook 'existing Bash DEBUG hook is preserved'
   case "$(trap -p DEBUG)" in
@@ -54,7 +54,7 @@ if [[ "$1" == zsh ]]; then
   add-zsh-hook precmd foreign_precmd_hook
   shellux_integration_version=19
   source "shell/shellux.zsh"
-  equal "$shellux_integration_version" 20 'existing Zsh integration upgrades'
+  equal "$shellux_integration_version" 25 'existing Zsh integration upgrades'
   [[ " ${preexec_functions[*]} " == *' foreign_preexec_hook '* ]] || fail 'existing Zsh preexec hook was removed'
   [[ " ${precmd_functions[*]} " == *' foreign_precmd_hook '* ]] || fail 'existing Zsh precmd hook was removed'
 fi
@@ -225,6 +225,32 @@ shellux exit
 fail 'shellux exit did not exit'
 TESTS
 done
+
+# The shell, not the dashboard process, owns command completion data.
+SHELLUX_BIN=true zsh -fc '
+  source shell/shellux.zsh
+  shellux_enabled=0
+  shellux_before_command "false"
+  false
+  shellux_prompt
+  [[ "$SHELLUX_LAST_COMMAND_STATUS" == 1 && "$SHELLUX_LAST_COMMAND_SECONDS" == <-> ]] || exit 1
+  shellux_before_command "shellux reload"
+  shellux_prompt
+  [[ "$SHELLUX_LAST_COMMAND_STATUS" == 1 ]] || exit 1
+' || { printf 'FAIL: Zsh last-command capture\n' >&2; exit 1; }
+SHELLUX_BIN=true bash --noprofile --norc -c '
+  source shell/shellux.bash
+  shellux_enabled=0
+  shellux_before_command false
+  false
+  eval "$PROMPT_COMMAND"
+  [[ "$SHELLUX_LAST_COMMAND_STATUS" == 1 && "$SHELLUX_LAST_COMMAND_SECONDS" =~ ^[0-9]+$ ]] || exit 1
+  shellux_command_paused=1
+  shellux_command_started=
+  shellux_before_command "shellux reload"
+  eval "$PROMPT_COMMAND"
+  [[ "$SHELLUX_LAST_COMMAND_STATUS" == 1 ]] || exit 1
+' || { printf 'FAIL: Bash last-command capture\n' >&2; exit 1; }
 
 # Loading Starship after Shellux still leaves its DEBUG hook in place until the
 # first prompt. Shellux then preserves it and yields to it before pausing.

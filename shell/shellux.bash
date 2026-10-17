@@ -4,8 +4,8 @@
 # Define the alias before DEBUG is installed, so startup does not pause itself.
 alias shx='shellux reload'
 
-if ! declare -F shellux_prompt >/dev/null 2>&1 || (( ${shellux_integration_version:-0} < 20 )); then
-  shellux_integration_version=20
+if ! declare -F shellux_prompt >/dev/null 2>&1 || (( ${shellux_integration_version:-0} < 25 )); then
+  shellux_integration_version=25
   : "${shellux_enabled:=1}"
   : "${shellux_render_header:=1}"
   : "${shellux_clear_startup_scrollback:=1}"
@@ -13,6 +13,9 @@ if ! declare -F shellux_prompt >/dev/null 2>&1 || (( ${shellux_integration_versi
   : "${shellux_output_mode:=0}"
   : "${shellux_command_paused:=0}"
   : "${shellux_watch_pid:=}"
+  shellux_command_started=
+  shellux_profile_dir=
+  shellux_profile_active=
   shellux_watch_before_command=0
 
   shellux_set_title() {
@@ -31,7 +34,28 @@ if ! declare -F shellux_prompt >/dev/null 2>&1 || (( ${shellux_integration_versi
   }
 
   shellux_prompt() {
+    local shellux_status="${1:-$?}"
+    if [[ -n "$shellux_command_started" ]]; then
+      export SHELLUX_LAST_COMMAND_STATUS="$shellux_status"
+      export SHELLUX_LAST_COMMAND_SECONDS="$(( SECONDS - shellux_command_started ))"
+      shellux_command_started=
+    fi
     (( shellux_enabled )) || return 0
+    if [[ -z "$shellux_profile_dir" ]]; then
+      shellux_profile_dir=$PWD
+      shellux_profile_active=$(command "${SHELLUX_BIN:-shellux}" profile resolve 2>/dev/null)
+    elif [[ "$PWD" != "$shellux_profile_dir" ]]; then
+      local shellux_previous_profile="$shellux_profile_active"
+      local shellux_next_profile
+      shellux_profile_dir=$PWD
+      shellux_next_profile=$(command "${SHELLUX_BIN:-shellux}" profile resolve 2>/dev/null)
+      if [[ "$shellux_previous_profile" != "$shellux_next_profile" || "$shellux_next_profile" == focus ]]; then
+        shellux_reload "$shellux_next_profile" || return $?
+        shellux_command_paused=0
+        return 0
+      fi
+      shellux_profile_active="$shellux_next_profile"
+    fi
     shellux_set_title
     if (( shellux_output_mode )); then
       # Normal output keeps the full viewport until an explicit reload.
@@ -77,6 +101,9 @@ if ! declare -F shellux_prompt >/dev/null 2>&1 || (( ${shellux_integration_versi
       printf '%s\n' "shellux: header is off; run 'shellux on'" >&2
       return 1
     fi
+    local shellux_next_profile="${1:-$(command "${SHELLUX_BIN:-shellux}" profile resolve 2>/dev/null)}"
+    shellux_profile_active="$shellux_next_profile"
+    shellux_profile_dir="$PWD"
     shellux_set_title
     shellux_stop_watch || return $?
     # The renderer clears history only after it has drawn the new header.
@@ -204,10 +231,13 @@ if ! declare -F shellux_prompt >/dev/null 2>&1 || (( ${shellux_integration_versi
   shellux_before_command() {
     local pending_command="${1:-${BASH_COMMAND:-}}"
     # Bash runs DEBUG before PROMPT_COMMAND as well as user commands.
-    [[ "$pending_command" == shellux_prompt ]] && return 0
+    [[ "$pending_command" == shellux_prompt* || "$pending_command" == shellux_handle_resize* ]] && return 0
+    (( shellux_command_paused )) && return 0
+    if [[ "$pending_command" != shellux* && "$pending_command" != shx* && -z "$shellux_command_started" ]]; then
+      shellux_command_started=$SECONDS
+    fi
     [[ -t 1 ]] || return 0
     (( shellux_enabled )) || return 0
-    (( shellux_command_paused )) && return 0
     shellux_set_title
     shellux_watch_before_command=0
     if [[ -n "$shellux_watch_pid" ]] && kill -0 "$shellux_watch_pid" 2>/dev/null; then
@@ -274,7 +304,7 @@ if ! declare -F shellux_prompt >/dev/null 2>&1 || (( ${shellux_integration_versi
   shellux_debug_ready=0
   shellux_previous_debug_trap=
   shellux_debug_trap_command='trap '\''shellux_debug_dispatch "$_" "$BASH_COMMAND"'\'' DEBUG'
-  shellux_prompt_hook='if (( ! shellux_debug_ready )); then shellux_debug_trap_parts=(); eval "shellux_debug_trap_parts=($(trap -p DEBUG))"; shellux_prepare_debug_hook "${shellux_debug_trap_parts[2]:-}"; eval "$shellux_debug_trap_command"; fi; shellux_prompt'
+  shellux_prompt_hook='shellux_previous_status=$?; if (( ! shellux_debug_ready )); then shellux_debug_trap_parts=(); eval "shellux_debug_trap_parts=($(trap -p DEBUG))"; shellux_prepare_debug_hook "${shellux_debug_trap_parts[2]:-}"; eval "$shellux_debug_trap_command"; fi; shellux_prompt "$shellux_previous_status"'
   if [[ "$(declare -p PROMPT_COMMAND 2>/dev/null)" == "declare -a "* ]]; then
     shellux_prompt_registered=0
     for shellux_prompt_entry in "${PROMPT_COMMAND[@]}"; do

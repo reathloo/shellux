@@ -1,8 +1,8 @@
 # Shellux integration for Zsh.
 # Source this file from .zshrc after installing the shellux binary.
 
-if (( $+functions[shellux_prompt] == 0 || ${shellux_integration_version:-0} < 20 )); then
-  typeset -g shellux_integration_version=20
+if (( $+functions[shellux_prompt] == 0 || ${shellux_integration_version:-0} < 25 )); then
+  typeset -g shellux_integration_version=25
   typeset -g shellux_enabled="${shellux_enabled:-1}"
   typeset -g shellux_render_header="${shellux_render_header:-1}"
   typeset -g shellux_clear_startup_scrollback="${shellux_clear_startup_scrollback:-1}"
@@ -10,6 +10,9 @@ if (( $+functions[shellux_prompt] == 0 || ${shellux_integration_version:-0} < 20
   typeset -g shellux_output_mode="${shellux_output_mode:-0}"
   typeset -g shellux_command_paused="${shellux_command_paused:-0}"
   typeset -g shellux_watch_pid="${shellux_watch_pid:-}"
+  typeset -g shellux_command_started=""
+  typeset -g shellux_profile_dir=""
+  typeset -g shellux_profile_active=""
   typeset -g shellux_watch_before_command=0
 
   shellux_set_title() {
@@ -28,7 +31,28 @@ if (( $+functions[shellux_prompt] == 0 || ${shellux_integration_version:-0} < 20
   }
 
   shellux_prompt() {
+    local shellux_status=$?
+    if [[ -n "$shellux_command_started" ]]; then
+      export SHELLUX_LAST_COMMAND_STATUS="$shellux_status"
+      export SHELLUX_LAST_COMMAND_SECONDS="$(( SECONDS - shellux_command_started ))"
+      shellux_command_started=""
+    fi
     (( shellux_enabled )) || return 0
+    if [[ -z "$shellux_profile_dir" ]]; then
+      shellux_profile_dir=$PWD
+      shellux_profile_active=$(command "${SHELLUX_BIN:-shellux}" profile resolve 2>/dev/null)
+    elif [[ "$PWD" != "$shellux_profile_dir" ]]; then
+      local shellux_previous_profile=$shellux_profile_active
+      local shellux_next_profile
+      shellux_profile_dir=$PWD
+      shellux_next_profile=$(command "${SHELLUX_BIN:-shellux}" profile resolve 2>/dev/null)
+      if [[ "$shellux_previous_profile" != "$shellux_next_profile" || "$shellux_next_profile" == focus ]]; then
+        shellux_reload "$shellux_next_profile" || return $?
+        shellux_command_paused=0
+        return 0
+      fi
+      shellux_profile_active=$shellux_next_profile
+    fi
     shellux_set_title
     if (( shellux_output_mode )); then
       # Normal output keeps the full viewport until an explicit reload.
@@ -83,6 +107,9 @@ if (( $+functions[shellux_prompt] == 0 || ${shellux_integration_version:-0} < 20
       print -u2 "shellux: header is off; run 'shellux on'"
       return 1
     fi
+    local shellux_next_profile="${1:-$(command "${SHELLUX_BIN:-shellux}" profile resolve 2>/dev/null)}"
+    shellux_profile_active=$shellux_next_profile
+    shellux_profile_dir=$PWD
     shellux_set_title
     shellux_stop_watch || return $?
     # The renderer clears history only after it has drawn the new header.
@@ -208,6 +235,9 @@ if (( $+functions[shellux_prompt] == 0 || ${shellux_integration_version:-0} < 20
     }
   fi
   shellux_before_command() {
+    if [[ "${1:-}" != shellux* && "${1:-}" != shx* && -z "$shellux_command_started" ]]; then
+      shellux_command_started=$SECONDS
+    fi
     [[ -t 1 ]] || return 0
     (( shellux_enabled )) || return 0
     (( shellux_command_paused )) && return 0
