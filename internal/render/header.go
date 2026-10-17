@@ -21,23 +21,126 @@ import (
 )
 
 const dashboardWidth = 52
+const spotifyMarqueeWidth = 21
+const spotifyMarqueeInterval = 300 * time.Millisecond
+
+// SpotifyMarqueeStep is the visible scrolling frame at the given time.
+func SpotifyMarqueeStep(now time.Time) int64 {
+	return now.UnixMilli() / spotifyMarqueeInterval.Milliseconds()
+}
 
 // HeaderLayout contains independently updateable regions of the header.
 type HeaderLayout struct {
-	Eye             []string
-	Dashboard       []string
-	EyeWidth        int
-	DashboardWidth  int
-	DashboardColumn int
-	colors          theme.Theme
-	compact         bool
-	focus           bool
-	stacked         bool
+	Eye                []string
+	Dashboard          []string
+	EyeWidth           int
+	DashboardWidth     int
+	DashboardColumn    int
+	colors             theme.Theme
+	compact            bool
+	focus              bool
+	stacked            bool
+	MarqueeActive      bool
+	HoveredTitleColumn int
+	playbackHits       []playbackHit
+}
+
+type playbackHit struct {
+	row, first, last int
+	action           systeminfo.PlaybackAction
+	seekDuration     time.Duration
+	seekWidth        int
+}
+
+type PlaybackTarget struct {
+	Action systeminfo.PlaybackAction
+	SeekTo time.Duration
+	IsSeek bool
+}
+
+type playbackControl struct {
+	label  string
+	action systeminfo.PlaybackAction
+}
+
+// PlaybackTargetAt resolves a click against the visible media controls.
+func (layout HeaderLayout) PlaybackTargetAt(column, row int) (PlaybackTarget, bool) {
+	for _, hit := range layout.playbackHits {
+		if row == hit.row && column >= hit.first && column <= hit.last {
+			if hit.seekWidth > 1 {
+				return PlaybackTarget{SeekTo: hit.seekDuration * time.Duration(column-hit.first) / time.Duration(hit.seekWidth-1), IsSeek: true}, true
+			}
+			return PlaybackTarget{Action: hit.action}, true
+		}
+	}
+	return PlaybackTarget{}, false
 }
 
 // Stacked reports whether the dashboard is above the focus clock, sharing its
 // terminal region. Metric updates must repaint that whole region.
 func (layout HeaderLayout) Stacked() bool { return layout.stacked }
+
+// HoverTitle highlights the title letter under the mouse without changing its width.
+func (layout HeaderLayout) HoverTitle(column, row int) HeaderLayout {
+	if row != 1 || column < 1 || layout.compact {
+		return layout
+	}
+	start := layout.DashboardColumn
+	lines := layout.Dashboard
+	if layout.stacked {
+		start = 1
+		lines = layout.Eye
+	}
+	const title = "S H E L L U X"
+	index := column - start
+	if len(lines) == 0 || index < 0 || index >= len(title) || index%2 != 0 {
+		return layout
+	}
+	line, highlighted := highlightVisibleCharacter(lines[0], index, rune(title[index]))
+	if !highlighted {
+		return layout
+	}
+	if layout.stacked {
+		layout.Eye = slices.Clone(layout.Eye)
+		layout.Eye[0] = line
+	} else {
+		layout.Dashboard = slices.Clone(layout.Dashboard)
+		layout.Dashboard[0] = line
+	}
+	layout.HoveredTitleColumn = column
+	return layout
+}
+
+func highlightVisibleCharacter(line string, target int, wanted rune) (string, bool) {
+	var result strings.Builder
+	column := 0
+	highlighted := false
+	for index := 0; index < len(line); {
+		if line[index] == '\033' && index+1 < len(line) && line[index+1] == '[' {
+			end := index + 2
+			for end < len(line) && (line[end] < '@' || line[end] > '~') {
+				end++
+			}
+			if end < len(line) {
+				result.WriteString(line[index : end+1])
+				index = end + 1
+				continue
+			}
+		}
+		character, size := utf8.DecodeRuneInString(line[index:])
+		if column == target && character == wanted {
+			result.WriteString("\033[7m")
+			result.WriteRune(character)
+			result.WriteString("\033[27m")
+			highlighted = true
+		} else {
+			result.WriteRune(character)
+		}
+		column += ansi.StringWidth(string(character))
+		index += size
+	}
+	return result.String(), highlighted
+}
 
 // Height returns the number of terminal rows occupied by the header.
 func (layout HeaderLayout) Height() int {
@@ -45,21 +148,32 @@ func (layout HeaderLayout) Height() int {
 }
 
 // Fit constrains a header to the visible terminal width. The dashboard is
-// hidden before it can wrap below the animation.
+// hidden if its base width cannot fit; longer optional content is clipped.
 func (layout HeaderLayout) Fit(columns int) HeaderLayout {
 	if layout.compact {
 		if columns > 0 {
-			layout.DashboardWidth = min(dashboardWidth, columns)
+			layout.DashboardWidth = min(layout.DashboardWidth, columns)
 			layout.Dashboard = slices.Clone(layout.Dashboard)
 			for index, value := range layout.Dashboard {
-				layout.Dashboard[index] = truncateStyledLine(value, columns)
+				layout.Dashboard[index] = ansi.Truncate(value, columns, "")
 			}
+			layout.clipPlaybackHits(columns, len(layout.Dashboard))
 		}
 		return layout
 	}
-	if columns > 0 && layout.DashboardColumn+layout.DashboardWidth-1 > columns {
+	if columns > 0 && layout.DashboardColumn+dashboardWidth-1 > columns {
 		layout.Dashboard = nil
 		layout.DashboardWidth = 0
+		layout.MarqueeActive = false
+		layout.playbackHits = nil
+	} else if columns > 0 && layout.DashboardColumn+layout.DashboardWidth-1 > columns {
+		available := columns - layout.DashboardColumn + 1
+		layout.DashboardWidth = available
+		layout.Dashboard = slices.Clone(layout.Dashboard)
+		for index, line := range layout.Dashboard {
+			layout.Dashboard[index] = ansi.Truncate(line, available, "")
+		}
+		layout.clipPlaybackHits(columns, len(layout.Dashboard))
 	}
 	if columns > 0 && layout.EyeWidth > columns {
 		layout.EyeWidth = columns
@@ -75,7 +189,7 @@ func (layout HeaderLayout) Fit(columns int) HeaderLayout {
 // always left for the prompt and its scrolling area, so a small terminal never
 // receives an invalid scrolling region below the visible screen.
 func (layout HeaderLayout) FitTerminal(columns, rows int) HeaderLayout {
-	if layout.focus && columns > 0 && columns < layout.DashboardColumn+layout.DashboardWidth-1 {
+	if layout.focus && columns > 0 && columns < layout.DashboardColumn+dashboardWidth-1 {
 		maxHeight := max(0, rows-2)
 		menu := make([]string, 0, len(layout.Dashboard))
 		for _, line := range layout.Dashboard {
@@ -100,6 +214,11 @@ func (layout HeaderLayout) FitTerminal(columns, rows int) HeaderLayout {
 		layout.Dashboard = nil
 		layout.DashboardWidth = 0
 		layout.stacked = true
+		for index := range layout.playbackHits {
+			layout.playbackHits[index].first -= layout.DashboardColumn - 1
+			layout.playbackHits[index].last -= layout.DashboardColumn - 1
+		}
+		layout.clipPlaybackHits(columns, len(menu))
 		return layout
 	}
 	layout = layout.Fit(columns)
@@ -108,6 +227,7 @@ func (layout HeaderLayout) FitTerminal(columns, rows int) HeaderLayout {
 		layout.Dashboard = nil
 		layout.EyeWidth = 0
 		layout.DashboardWidth = 0
+		layout.playbackHits = nil
 		return layout
 	}
 	maxHeight := rows - 2
@@ -117,7 +237,20 @@ func (layout HeaderLayout) FitTerminal(columns, rows int) HeaderLayout {
 	if len(layout.Dashboard) > maxHeight {
 		layout.Dashboard = layout.Dashboard[:maxHeight]
 	}
+	layout.clipPlaybackHits(columns, maxHeight)
 	return layout
+}
+
+func (layout *HeaderLayout) clipPlaybackHits(columns, rows int) {
+	kept := layout.playbackHits[:0]
+	for _, hit := range layout.playbackHits {
+		if hit.row < 1 || hit.row > rows || hit.first > columns {
+			continue
+		}
+		hit.last = min(hit.last, columns)
+		kept = append(kept, hit)
+	}
+	layout.playbackHits = kept
 }
 
 // Header renders the compact, static Shellux header.
@@ -165,7 +298,14 @@ func NewHeaderLayoutWithConfig(snapshot systeminfo.Snapshot, eye string, colors 
 		return config.Shown(settings.Visible, name)
 	}
 
+	eyeLines := strings.Split(eye, "\n")
+	eyeWidth := 0
+	for _, line := range eyeLines {
+		eyeWidth = max(eyeWidth, visibleWidth(line))
+	}
+	dashboardColumn := eyeWidth + 6
 	dashboard := []string{dashboardTitle(colors, snapshot.Now, show("time"))}
+	var playbackHits []playbackHit
 	if settings.RuntimeProfile == "snapshot" {
 		dashboard = []string{colors.Accent + "S H E L L U X  ·  SNAPSHOT" + colors.Reset,
 			dashboardItem(colors, "captured", snapshot.Now.Format("2006-01-02 15:04:05 -07:00")),
@@ -189,7 +329,13 @@ func NewHeaderLayoutWithConfig(snapshot systeminfo.Snapshot, eye string, colors 
 			var items []string
 			for _, entry := range entries[start:end] {
 				for _, item := range dashboardEntry(snapshot, settings, entry, lang) {
-					items = append(items, dashboardItem(colors, lang.Text(item.label), item.value))
+					row := len(dashboard) + 3 + len(items)
+					playbackHits = append(playbackHits, entryPlaybackHits(entry.Key, snapshot.Playback, item.value, row, dashboardColumn+13)...)
+					if entry.Key == "spotify" && config.Shown(settings.Visible, "spotify.album") {
+						items = append(items, dashboardItemWithWidth(colors, lang.Text(item.label), item.value, ansi.StringWidth(item.value)))
+					} else {
+						items = append(items, dashboardItem(colors, lang.Text(item.label), item.value))
+					}
 				}
 			}
 			appendSection(group, items)
@@ -202,19 +348,16 @@ func NewHeaderLayoutWithConfig(snapshot systeminfo.Snapshot, eye string, colors 
 		}
 	}
 
-	eyeLines := strings.Split(eye, "\n")
-	eyeWidth := 0
-	for _, line := range eyeLines {
-		eyeWidth = max(eyeWidth, visibleWidth(line))
-	}
 	return HeaderLayout{
 		Eye:             eyeLines,
 		Dashboard:       dashboard,
 		EyeWidth:        eyeWidth,
-		DashboardWidth:  dashboardWidth,
-		DashboardColumn: eyeWidth + 6,
+		DashboardWidth:  dashboardLinesWidth(dashboard),
+		DashboardColumn: dashboardColumn,
 		colors:          colors,
 		focus:           settings.RuntimeProfile == "focus",
+		MarqueeActive:   spotifyMarqueeActive(snapshot, settings),
+		playbackHits:    playbackHits,
 	}
 }
 
@@ -224,15 +367,79 @@ func newMinimalLayout(snapshot systeminfo.Snapshot, pulse string, colors theme.T
 		title += "  " + colors.Secondary + snapshot.Now.Format("15:04") + colors.Reset
 	}
 	lines := []string{title}
+	var playbackHits []playbackHit
 	for _, entry := range settings.OrderedMenuEntries() {
 		if entry.Group == "HEADER" {
 			continue
 		}
 		for _, item := range dashboardEntry(snapshot, settings, entry, lang) {
-			lines = append(lines, colors.Secondary+strings.ToUpper(lang.Text(item.label))+colors.Reset+" "+item.value)
+			label := strings.ToUpper(lang.Text(item.label))
+			if entry.Key == "progress" && snapshot.Playback.Available && snapshot.Playback.Title != "" {
+				item.value = compactPlaybackValue(snapshot.Playback, config.Shown(settings.Visible, "progress.playback"), config.Shown(settings.Visible, "progress.skip"))
+			}
+			playbackHits = append(playbackHits, entryPlaybackHits(entry.Key, snapshot.Playback, item.value, len(lines)+1, ansi.StringWidth(label)+2)...)
+			lines = append(lines, colors.Secondary+label+colors.Reset+" "+item.value)
 		}
 	}
-	return HeaderLayout{Dashboard: lines, DashboardWidth: dashboardWidth, DashboardColumn: 1, colors: colors, compact: true}
+	return HeaderLayout{Dashboard: lines, DashboardWidth: dashboardLinesWidth(lines), DashboardColumn: 1, colors: colors, compact: true, MarqueeActive: spotifyMarqueeActive(snapshot, settings), playbackHits: playbackHits}
+}
+
+func playbackButton(playback systeminfo.Playback) string {
+	if playback.Playing {
+		return "❚❚"
+	}
+	return "▶"
+}
+
+func progressControls() []playbackControl {
+	return []playbackControl{
+		{"⏮", systeminfo.PlaybackPrevious},
+		{"⏭", systeminfo.PlaybackNext},
+	}
+}
+
+func progressControlTail() string {
+	labels := make([]string, 0, len(progressControls()))
+	for _, control := range progressControls() {
+		labels = append(labels, control.label)
+	}
+	return " " + strings.Join(labels, " ")
+}
+
+func entryPlaybackHits(key string, playback systeminfo.Playback, value string, row, first int) []playbackHit {
+	if key != "progress" || !playback.Available || playback.Title == "" {
+		return nil
+	}
+	var hits []playbackHit
+	if strings.HasPrefix(value, playbackButton(playback)+" ") {
+		hits = append(hits, playbackHit{row: row, first: first, last: first + ansi.StringWidth(playbackButton(playback)) - 1, action: systeminfo.PlaybackToggle})
+	}
+	if playback.Duration > 0 {
+		runes := []rune(value)
+		for start := 0; start < len(runes); start++ {
+			if runes[start] != '█' && runes[start] != '░' {
+				continue
+			}
+			end := start
+			for end < len(runes) && (runes[end] == '█' || runes[end] == '░') {
+				end++
+			}
+			if end-start > 1 {
+				hits = append(hits, playbackHit{row: row, first: first + start, last: first + end - 1, seekDuration: playback.Duration, seekWidth: end - start})
+			}
+			break
+		}
+	}
+	controls := strings.TrimSpace(progressControlTail())
+	if strings.HasSuffix(value, controls) {
+		first += ansi.StringWidth(value) - ansi.StringWidth(controls)
+		for _, control := range progressControls() {
+			last := first + ansi.StringWidth(control.label) - 1
+			hits = append(hits, playbackHit{row: row, first: first, last: last, action: control.action})
+			first = last + 2
+		}
+	}
+	return hits
 }
 
 func dashboardTitle(colors theme.Theme, now time.Time, showTime bool) string {
@@ -254,7 +461,10 @@ func sectionEnd(colors theme.Theme) string {
 }
 
 func dashboardItem(colors theme.Theme, label, value string) string {
-	const valueWidth = dashboardWidth - 14
+	return dashboardItemWithWidth(colors, label, value, dashboardWidth-14)
+}
+
+func dashboardItemWithWidth(colors theme.Theme, label, value string, valueWidth int) string {
 	// Paths and track metadata are plain text, never terminal instructions.
 	value = strings.Map(func(character rune) rune {
 		if unicode.IsControl(character) {
@@ -263,6 +473,14 @@ func dashboardItem(colors theme.Theme, label, value string) string {
 		return character
 	}, value)
 	return fmt.Sprintf("%s│  %s%-9s%s %s", colors.Muted, colors.Secondary, strings.ToUpper(label), colors.Reset, shorten(value, valueWidth))
+}
+
+func dashboardLinesWidth(lines []string) int {
+	width := dashboardWidth
+	for _, line := range lines {
+		width = max(width, ansi.StringWidth(line))
+	}
+	return width
 }
 
 type dashboardValue struct{ label, value string }
@@ -278,6 +496,53 @@ func enabledParts(settings config.Config, entry config.MenuEntry) []string {
 }
 
 func hasPart(parts []string, wanted string) bool { return slices.Contains(parts, wanted) }
+
+func spotifyMarqueeActive(snapshot systeminfo.Snapshot, settings config.Config) bool {
+	return settings.RuntimeProfile != "snapshot" && config.EntryShown(settings.Visible, "spotify") &&
+		config.Shown(settings.Visible, "spotify.track") && snapshot.Playback.Available && snapshot.Playback.Title != "" &&
+		ansi.StringWidth(snapshot.Playback.Artist+" — "+snapshot.Playback.Title) > spotifyMarqueeWidth
+}
+
+func marqueeSpotifyTrack(value string, now time.Time) string {
+	value = strings.Map(func(r rune) rune {
+		if unicode.IsControl(r) {
+			return ' '
+		}
+		return r
+	}, value)
+	if ansi.StringWidth(value) <= spotifyMarqueeWidth {
+		return value
+	}
+	cycle := []rune(value + "   ")
+	step := int64(0)
+	if !now.IsZero() {
+		step = SpotifyMarqueeStep(now)
+	}
+	start := int(step % int64(len(cycle)))
+	if start < 0 {
+		start += len(cycle)
+	}
+	var result strings.Builder
+	width := 0
+	for offset := 0; width < spotifyMarqueeWidth && offset < len(cycle)+spotifyMarqueeWidth; offset++ {
+		r := cycle[(start+offset)%len(cycle)]
+		cellWidth := ansi.StringWidth(string(r))
+		if cellWidth == 0 {
+			if width > 0 {
+				result.WriteRune(r)
+			}
+			continue
+		}
+		if cellWidth > spotifyMarqueeWidth-width {
+			result.WriteByte(' ')
+			width++
+			continue
+		}
+		result.WriteRune(r)
+		width += cellWidth
+	}
+	return result.String()
+}
 
 func dashboardLabel(entry config.MenuEntry) string {
 	if entry.Key == "ram" {
@@ -550,13 +815,31 @@ func dashboardEntry(snapshot systeminfo.Snapshot, settings config.Config, entry 
 	case "spotify":
 		value := lang.Text("No song playing")
 		if snapshot.Playback.Available && snapshot.Playback.Title != "" {
-			value = snapshot.Playback.Artist + " — " + snapshot.Playback.Title
+			showTrack, showAlbum := hasPart(parts, "track"), hasPart(parts, "album")
+			if showTrack {
+				value = marqueeSpotifyTrack(snapshot.Playback.Artist+" — "+snapshot.Playback.Title, snapshot.Now)
+			}
+			if showAlbum {
+				album := availableText(snapshot.Playback.Album)
+				album = strings.Map(func(r rune) rune {
+					if unicode.IsControl(r) {
+						return ' '
+					}
+					return r
+				}, album)
+				if showTrack {
+					value += strings.Repeat(" ", max(0, spotifyMarqueeWidth-ansi.StringWidth(value)))
+					value += " │ " + album
+				} else {
+					value = "Album: " + album
+				}
+			}
 		}
 		return join([]string{value}, "")
 	case "progress":
 		value := "N/A"
 		if snapshot.Playback.Available && snapshot.Playback.Title != "" {
-			value = playbackValue(snapshot.Playback)
+			value = playbackValue(snapshot.Playback, hasPart(parts, "playback"), hasPart(parts, "skip"))
 		}
 		return join([]string{value}, "")
 	case "date":
@@ -1282,12 +1565,42 @@ func uptimeValue(uptime systeminfo.Uptime) string {
 	return fmt.Sprintf("%dm", minutes)
 }
 
-func playbackValue(playback systeminfo.Playback) string {
-	state := "❚❚"
-	if playback.Playing {
-		state = "▶"
+func playbackValue(playback systeminfo.Playback, showPlayback, showSkip bool) string {
+	return playbackValueWithBar(playback, dashboardWidth-14, showPlayback, showSkip)
+}
+
+func compactPlaybackValue(playback systeminfo.Playback, showPlayback, showSkip bool) string {
+	return playbackValueWithBar(playback, 31, showPlayback, showSkip)
+}
+
+func playbackValueWithBar(playback systeminfo.Playback, valueWidth int, showPlayback, showSkip bool) string {
+	if !showPlayback {
+		if showSkip {
+			return strings.TrimSpace(progressControlTail())
+		}
+		return ""
 	}
-	return fmt.Sprintf("%s %s %s %s", state, formatPlaybackDuration(playback.Position), playbackBar(playback.Position, playback.Duration, 10), formatPlaybackDuration(playback.Duration))
+	tail := ""
+	if showSkip {
+		tail = progressControlTail()
+	}
+	button := playbackButton(playback)
+	position := formatPlaybackDuration(playback.Position)
+	duration := formatPlaybackDuration(playback.Duration)
+	base := fmt.Sprintf("%s %s %s", button, position, duration)
+	if playback.Duration > 0 {
+		barWidth := min(18, max(0, valueWidth-ansi.StringWidth(base)-ansi.StringWidth(tail)-1))
+		if barWidth > 0 {
+			base = fmt.Sprintf("%s %s %s %s", button, position, playbackBar(playback.Position, playback.Duration, barWidth), duration)
+		}
+		if ansi.StringWidth(base+tail) > valueWidth {
+			base = button + " " + position
+		}
+		if ansi.StringWidth(base+tail) > valueWidth {
+			base = button
+		}
+	}
+	return base + tail
 }
 
 func formatPlaybackDuration(value time.Duration) string {

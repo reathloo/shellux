@@ -150,10 +150,12 @@ func decodeConfig(data []byte) (Config, error) {
 		}
 	}
 	migrateTraffic(config.Visible, legacy.Visible)
-	config.MenuLayout = completeMenuLayout(config.MenuLayout)
+	delete(config.Visible, "spotify-player")
+	config.MenuLayout = completeMenuLayout(removeLegacyPlayer(config.MenuLayout))
 	for name, preset := range config.MenuPresets {
+		delete(preset.Visible, "spotify-player")
 		preset.Visible = completeMenuPresetVisibility(preset.Visible)
-		preset.Layout = completeMenuLayout(preset.Layout)
+		preset.Layout = completeMenuLayout(removeLegacyPlayer(preset.Layout))
 		config.MenuPresets[name] = preset
 	}
 	if err := config.Validate(); err != nil {

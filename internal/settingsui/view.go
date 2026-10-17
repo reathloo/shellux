@@ -395,7 +395,7 @@ func (m *model) entryPreview(entry string) string {
 	case "spotify":
 		return "Artist — Song"
 	case "progress":
-		return "▶ 1:24 ███░░░ 3:42"
+		return "❚❚ 1:24 ███░░░ 3:42 ⏮ ⏭"
 	case "logged-users":
 		return "2 " + m.tr("users") + " · alex, sam"
 	case "media-activity":
@@ -408,6 +408,14 @@ func (m *model) entryPreview(entry string) string {
 
 func (m *model) componentPreview(entry, part string) string {
 	switch entry + "." + part {
+	case "spotify.track":
+		return "Artist — Song"
+	case "spotify.album":
+		return "Album: Example"
+	case "progress.playback":
+		return "❚❚ 1:24 ███░░░ 3:42"
+	case "progress.skip":
+		return "⏮ ⏭"
 	case "git-branch.branch":
 		return "main"
 	case "git-branch.repository":

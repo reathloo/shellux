@@ -2,7 +2,7 @@ package shell
 
 import _ "embed"
 
-const IntegrationVersion = 25
+const IntegrationVersion = 28
 
 //go:embed shellux.zsh
 var Zsh []byte

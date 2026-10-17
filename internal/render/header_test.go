@@ -6,7 +6,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/charmbracelet/x/ansi"
+
 	"github.com/reathloo/shellux/internal/config"
+	"github.com/reathloo/shellux/internal/locale"
 	"github.com/reathloo/shellux/internal/systeminfo"
 	"github.com/reathloo/shellux/internal/theme"
 )
@@ -65,9 +68,187 @@ func TestHeaderHidesThermalStateByDefault(t *testing.T) {
 
 func TestPlaybackValue(t *testing.T) {
 	playback := systeminfo.Playback{Playing: true, Position: 90 * time.Second, Duration: 180 * time.Second}
-	if got, want := playbackValue(playback), "▶ 1:30 █████░░░░░ 3:00"; got != want {
+	if got, want := playbackValue(playback, true, true), "❚❚ 1:30 █████████░░░░░░░░░ 3:00 ⏮ ⏭"; got != want {
 		t.Fatalf("playbackValue() = %q, want %q", got, want)
 	}
+	playback.Playing = false
+	if got := playbackValue(playback, true, true); !strings.HasPrefix(got, "▶ ") {
+		t.Fatalf("paused playback should offer a play button: %q", got)
+	}
+	playback.Duration = 1200 * time.Hour
+	if got := playbackValue(playback, true, true); !strings.HasSuffix(got, "⏮ ⏭") || visibleWidth(got) > dashboardWidth-14 {
+		t.Fatalf("long progress must retain all controls within the row: %q", got)
+	}
+}
+
+func TestDashboardPlaybackMouseTargets(t *testing.T) {
+	playback := systeminfo.Playback{Available: true, Playing: true, Title: "Song", Artist: "Artist", Duration: 3 * time.Minute}
+	settings := config.Default()
+	layout := NewHeaderLayoutWithConfig(systeminfo.Snapshot{Playback: playback}, "eye", theme.DarkLuxury(), settings).FitTerminal(100, 40)
+	want := []systeminfo.PlaybackAction{systeminfo.PlaybackToggle, "", systeminfo.PlaybackPrevious, systeminfo.PlaybackNext}
+	if len(layout.playbackHits) != len(want) {
+		t.Fatalf("mouse targets = %d, want %d", len(layout.playbackHits), len(want))
+	}
+	for i, hit := range layout.playbackHits {
+		if target, ok := layout.PlaybackTargetAt(hit.first, hit.row); !ok || target.Action != want[i] {
+			t.Fatalf("target %d = %+v, %t, want %q", i, target, ok, want[i])
+		}
+		line := stripANSI(layout.Dashboard[hit.row-1])
+		if hit.first < layout.DashboardColumn || hit.last-layout.DashboardColumn >= len([]rune(line)) {
+			t.Fatalf("target %d is outside rendered line %q", i, line)
+		}
+	}
+	bar := layout.playbackHits[1]
+	for _, check := range []struct {
+		column   int
+		position time.Duration
+	}{{bar.first, 0}, {(bar.first + bar.last) / 2, 85 * time.Second}, {bar.last, playback.Duration}} {
+		target, ok := layout.PlaybackTargetAt(check.column, bar.row)
+		if !ok || !target.IsSeek || absDuration(target.SeekTo-check.position) > 5*time.Second {
+			t.Fatalf("bar click at %d = %+v, %t", check.column, target, ok)
+		}
+	}
+	if _, ok := layout.PlaybackTargetAt(layout.playbackHits[0].first-1, layout.playbackHits[0].row); ok {
+		t.Fatal("click before first control triggered an action")
+	}
+	if _, ok := layout.FitTerminal(40, 40).PlaybackTargetAt(layout.playbackHits[0].first, layout.playbackHits[0].row); ok {
+		t.Fatal("hidden dashboard kept active mouse targets")
+	}
+	settings.RuntimeProfile = "minimal"
+	minimal := NewHeaderLayoutWithConfig(systeminfo.Snapshot{Playback: playback}, "•", theme.DarkLuxury(), settings).FitTerminal(40, 40)
+	if len(minimal.playbackHits) != len(want) {
+		t.Fatal("minimal dashboard lost playback controls")
+	}
+	if minimal.playbackHits[1].seekWidth < 2 || minimal.playbackHits[len(minimal.playbackHits)-1].last > 40 {
+		t.Fatal("minimal playback controls extend beyond visible dashboard")
+	}
+	playback.Duration = 0
+	unknownDuration := NewHeaderLayoutWithConfig(systeminfo.Snapshot{Playback: playback}, "eye", theme.DarkLuxury(), config.Default()).FitTerminal(100, 40)
+	for _, hit := range unknownDuration.playbackHits {
+		if hit.seekWidth > 0 {
+			t.Fatal("unknown song duration exposed a seek target")
+		}
+	}
+	playback.Duration = 3 * time.Minute
+	settings.RuntimeProfile = "focus"
+	stacked := NewHeaderLayoutWithConfig(systeminfo.Snapshot{Playback: playback}, FocusClock(30*time.Minute), theme.Focus(), settings).FitTerminal(70, 40)
+	if !stacked.Stacked() || len(stacked.playbackHits) == 0 {
+		t.Fatal("stacked focus dashboard lost playback controls")
+	}
+	for _, hit := range stacked.playbackHits {
+		if target, ok := stacked.PlaybackTargetAt(hit.first, hit.row); !ok || target.Action != hit.action || target.IsSeek != (hit.seekWidth > 1) {
+			t.Fatalf("stacked target = %+v, %t, want %q", target, ok, hit.action)
+		}
+	}
+}
+
+func TestSpotifyAlbumAndProgressSkipSwitches(t *testing.T) {
+	playback := systeminfo.Playback{Available: true, Playing: true, Title: "Get Lucky", Artist: "Daft Punk", Album: "Random Access Memories", Duration: 3 * time.Minute}
+	settings := config.Default()
+	snapshot := systeminfo.Snapshot{Playback: playback}
+	defaultLayout := NewHeaderLayoutWithConfig(snapshot, "eye", theme.DarkLuxury(), settings)
+	if strings.Contains(stripANSI(strings.Join(defaultLayout.Dashboard, "\n")), "Random Access Memories") || len(defaultLayout.playbackHits) != 4 {
+		t.Fatal("default Spotify and Progress switches changed")
+	}
+	settings.Visible["spotify.album"] = true
+	settings.Visible["progress.skip"] = false
+	snapshot.Now = time.Unix(0, 0)
+	layout := NewHeaderLayoutWithConfig(snapshot, "eye", theme.DarkLuxury(), settings)
+	output := stripANSI(strings.Join(layout.Dashboard, "\n"))
+	if strings.Count(output, "SPOTIFY") != 1 || strings.Contains(output, "│  ALBUM") || !strings.Contains(output, "Daft Punk — Get Lucky │ Random Access Memories") || layout.DashboardWidth <= dashboardWidth || strings.Contains(output, "⏮") || strings.Contains(output, "⏭") {
+		t.Fatalf("component switches did not update dashboard: %s", output)
+	}
+	clipped := layout.FitTerminal(layout.DashboardColumn+dashboardWidth+3, 40)
+	if len(clipped.Dashboard) == 0 || clipped.DashboardWidth != dashboardWidth+4 {
+		t.Fatal("wide Spotify row hid the dashboard instead of fitting the terminal")
+	}
+	if len(layout.playbackHits) != 2 || layout.playbackHits[0].action != systeminfo.PlaybackToggle || layout.playbackHits[1].seekWidth < 2 {
+		t.Fatalf("skip switch left incorrect click targets: %+v", layout.playbackHits)
+	}
+	settings.Visible["progress.playback"] = false
+	settings.Visible["progress.skip"] = true
+	settings.Visible["spotify.track"] = false
+	snapshot.Now = time.Unix(0, 0)
+	layout = NewHeaderLayoutWithConfig(snapshot, "eye", theme.DarkLuxury(), settings)
+	output = stripANSI(strings.Join(layout.Dashboard, "\n"))
+	if strings.Contains(output, "Daft Punk") || !strings.Contains(output, "Album: Random Access Memories") || !strings.Contains(output, "⏮ ⏭") || len(layout.playbackHits) != 2 || layout.MarqueeActive {
+		t.Fatalf("independent Spotify and Progress parts did not render: %s; hits: %+v", output, layout.playbackHits)
+	}
+}
+
+func TestSpotifyTrackMarquee(t *testing.T) {
+	const long = "Daft Punk — A Very Long Song Title"
+	start := time.Unix(0, 0)
+	first := marqueeSpotifyTrack(long, start)
+	second := marqueeSpotifyTrack(long, start.Add(spotifyMarqueeInterval))
+	if ansi.StringWidth(first) != spotifyMarqueeWidth || ansi.StringWidth(second) != spotifyMarqueeWidth || first == second || !strings.HasPrefix(first, "Daft Punk") {
+		t.Fatalf("marquee frames = %q and %q", first, second)
+	}
+	if got := marqueeSpotifyTrack(long, start.Add(time.Duration(len([]rune(long))+3)*spotifyMarqueeInterval)); got != first {
+		t.Fatalf("marquee did not loop: %q != %q", got, first)
+	}
+	if got := marqueeSpotifyTrack("Björk — Jóga", start.Add(5*time.Second)); got != "Björk — Jóga" {
+		t.Fatalf("short title moved: %q", got)
+	}
+	if got := marqueeSpotifyTrack("Long 🚀 Song with extra words", start); ansi.StringWidth(got) != spotifyMarqueeWidth {
+		t.Fatalf("wide glyph changed field width: %q", got)
+	}
+	settings := config.Default()
+	snapshot := systeminfo.Snapshot{Now: start, Playback: systeminfo.Playback{Available: true, Artist: "Daft Punk", Title: "A Very Long Song Title"}}
+	firstLayout := NewHeaderLayoutWithConfig(snapshot, "eye", theme.DarkLuxury(), settings)
+	if !firstLayout.MarqueeActive || !strings.Contains(stripANSI(strings.Join(firstLayout.Dashboard, "\n")), first) {
+		t.Fatal("long title did not activate dashboard marquee")
+	}
+	snapshot.Now = start.Add(spotifyMarqueeInterval)
+	secondLayout := NewHeaderLayoutWithConfig(snapshot, "eye", theme.DarkLuxury(), settings)
+	if !strings.Contains(stripANSI(strings.Join(secondLayout.Dashboard, "\n")), second) {
+		t.Fatal("dashboard did not advance marquee")
+	}
+	settings.Visible["spotify.album"] = true
+	snapshot.Playback.Album = "Very Long Album Name"
+	entry := config.MenuEntry{Key: "spotify", Name: "spotify", Parts: []string{"track", "album"}}
+	firstValue := dashboardEntry(snapshot, settings, entry, locale.English)[0].value
+	snapshot.Now = snapshot.Now.Add(spotifyMarqueeInterval)
+	secondValue := dashboardEntry(snapshot, settings, entry, locale.English)[0].value
+	firstParts := strings.SplitN(firstValue, " │ ", 2)
+	secondParts := strings.SplitN(secondValue, " │ ", 2)
+	if len(firstParts) != 2 || len(secondParts) != 2 || firstParts[0] == secondParts[0] || firstParts[1] != "Very Long Album Name" || secondParts[1] != firstParts[1] || ansi.StringWidth(firstParts[0]) != spotifyMarqueeWidth {
+		t.Fatalf("album moved with track: %q, %q", firstValue, secondValue)
+	}
+	settings.Visible["spotify.track"] = false
+	if NewHeaderLayoutWithConfig(snapshot, "eye", theme.DarkLuxury(), settings).MarqueeActive {
+		t.Fatal("hidden track kept marquee active")
+	}
+}
+
+func TestTitleHoverHighlightsOnlyLetters(t *testing.T) {
+	for _, colors := range []theme.Theme{theme.DarkLuxury(), theme.Rainbow()} {
+		layout := NewHeaderLayoutWithConfig(systeminfo.Snapshot{}, "eye", colors, config.Default()).FitTerminal(100, 40)
+		column := layout.DashboardColumn + 2 // H in S H E L L U X
+		hovered := layout.HoverTitle(column, 1)
+		if hovered.HoveredTitleColumn != column || !strings.Contains(hovered.Dashboard[0], "\033[7mH\033[27m") {
+			t.Fatalf("hover did not highlight H: %q", hovered.Dashboard[0])
+		}
+		if ansi.Strip(hovered.Dashboard[0]) != ansi.Strip(layout.Dashboard[0]) || ansi.StringWidth(hovered.Dashboard[0]) != ansi.StringWidth(layout.Dashboard[0]) {
+			t.Fatal("hover changed title text or width")
+		}
+		if layout.HoverTitle(column-1, 1).HoveredTitleColumn != 0 || layout.HoverTitle(column, 2).HoveredTitleColumn != 0 {
+			t.Fatal("space or other row reacted to title hover")
+		}
+	}
+	settings := config.Default()
+	settings.RuntimeProfile = "focus"
+	stacked := NewHeaderLayoutWithConfig(systeminfo.Snapshot{}, FocusClock(30*time.Minute), theme.Focus(), settings).FitTerminal(70, 40)
+	if !stacked.Stacked() || stacked.HoverTitle(3, 1).HoveredTitleColumn != 3 {
+		t.Fatal("stacked focus title did not react to hover")
+	}
+}
+
+func absDuration(value time.Duration) time.Duration {
+	if value < 0 {
+		return -value
+	}
+	return value
 }
 
 func TestUptimeValue(t *testing.T) {

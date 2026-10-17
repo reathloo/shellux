@@ -37,13 +37,21 @@ var entryHelp = map[string]helpText{
 	"ssh-link":        {"Shows the client and server endpoints reported by SSH, without network requests.", "Zeigt die von SSH gemeldeten Client- und Server-Endpunkte ohne Netzwerkanfragen."},
 	"remote-terminal": {"Shows the SSH terminal device and terminal type.", "Zeigt das SSH-Terminalgerät und den Terminaltyp."},
 	"directory":       {"Shows the current working directory, shortened to fit the dashboard.", "Zeigt das aktuelle Arbeitsverzeichnis, passend zur Dashboard-Breite gekürzt."},
-	"spotify":         {"Shows artist and title from the Spotify desktop app, or that nothing is playing.", "Zeigt Interpret und Titel aus der Spotify-Desktop-App oder dass nichts wiedergegeben wird."},
-	"progress":        {"Shows playback state, elapsed time and song progress for Spotify.", "Zeigt Wiedergabestatus, vergangene Zeit und Songfortschritt von Spotify."},
+	"spotify":         {"Shows artist and title in a scrolling field; the optional album stays fixed beside it.", "Zeigt Interpret und Titel als Laufschrift; das optionale Album steht fest daneben."},
+	"progress":        {"Shows playback time and a seekable bar; previous and next buttons share one switch.", "Zeigt Wiedergabezeit und anklickbaren Balken; Vorheriger und Nächster teilen einen Schalter."},
 	"logged-users":    {"Shows distinct users with local login sessions, not all running processes.", "Zeigt unterschiedliche Benutzer mit lokalen Anmeldesitzungen, nicht alle laufenden Prozesse."},
 	"time":            {"Shows the current time in the dashboard title. It does not occupy a menu slot.", "Zeigt die aktuelle Uhrzeit im Dashboard-Titel. Sie belegt keinen Menüplatz."},
 }
 
 var componentHelp = map[string]map[string]helpText{
+	"spotify": {
+		"track": {"Shows the current artist and song title.", "Zeigt Interpret und Titel des aktuellen Songs."},
+		"album": {"Shows the album fixed to the right of the scrolling track text.", "Zeigt das Album fest rechts neben der Laufschrift."},
+	},
+	"progress": {
+		"playback": {"Shows playback time, the seek bar and the play/pause button.", "Zeigt Wiedergabezeit, Spulbalken und Start/Pause-Schaltfläche."},
+		"skip":     {"Shows the previous and next buttons together.", "Zeigt Vorheriger und Nächster gemeinsam an."},
+	},
 	"git-branch": {
 		"branch":     {"Shows the current branch, or a short commit ID when HEAD is detached.", "Zeigt den aktuellen Branch oder bei gelöstem HEAD eine kurze Commit-ID."},
 		"repository": {"Shows the Git repository folder name.", "Zeigt den Ordnernamen des Git-Repositories."},

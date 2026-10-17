@@ -153,6 +153,7 @@ var german = map[string]string{
 	"SYSTEM": "SYSTEM", "NETWORK": "NETZWERK", "RESOURCES": "RESSOURCEN", "CODING": "CODING", "SESSION": "SITZUNG", "HEADER": "KOPFZEILE",
 	"branch": "Branch", "git sync": "Git-Sync", "runtimes": "Laufzeit", "contexts": "Kontexte", "last cmd": "Befehl",
 	"Branch": "Branch", "Repository": "Repository", "Ahead": "Voraus", "Behind": "Zurück", "Go": "Go", "Node": "Node", "Python": "Python", "Java": "Java", "Docker": "Docker", "Kubernetes": "Kubernetes", "Duration": "Dauer", "Exit code": "Exit-Code",
+	"Artist + title": "Interpret + Titel", "Album": "Album", "Time + seek bar": "Zeit + Spulbalken", "Skip buttons": "Skip-Schaltflächen",
 	"platform": "Plattform", "uptime": "Laufzeit", "date": "Datum", "hostname": "Hostname", "traffic": "Traffic", "cores": "Kerne", "memory": "RAM", "ram": "RAM", "volume": "Speicher", "battery": "Batterie", "thermal": "Thermik", "path": "Pfad", "progress": "Fortschr.", "time": "Uhrzeit",
 	"disk I/O": "Disk-I/O", "loss": "Paketverlust", "user": "Benutzer", "users": "Benutzer", "media": "Medienzugriff", "swap": "Swap", "gpu": "GPU", "free": "frei",
 	"1 min": "1 Min.", "5 min": "5 Min.", "15 min": "15 Min.", "Cores": "Kerne",

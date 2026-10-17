@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/signal"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -18,6 +19,7 @@ import (
 	"github.com/reathloo/shellux/internal/config"
 	"github.com/reathloo/shellux/internal/live"
 	"github.com/reathloo/shellux/internal/locale"
+	"github.com/reathloo/shellux/internal/playerui"
 	"github.com/reathloo/shellux/internal/render"
 	"github.com/reathloo/shellux/internal/settingsui"
 	"github.com/reathloo/shellux/internal/systeminfo"
@@ -183,6 +185,28 @@ func runCommand(args []string) bool {
 		return false
 	}
 	switch args[0] {
+	case "mouse":
+		if len(args) != 3 {
+			commandUsage("shellux mouse <column> <row>")
+		}
+		column, columnErr := strconv.Atoi(args[1])
+		row, rowErr := strconv.Atoi(args[2])
+		if columnErr != nil || rowErr != nil || column < 1 || row < 1 {
+			commandUsage("shellux mouse <column> <row>")
+		}
+		if err := handleDashboardMouse(column, row); err != nil {
+			fmt.Fprintf(os.Stderr, "shellux: Spotify control: %v\n", err)
+			os.Exit(1)
+		}
+		return true
+	case "spotify":
+		if len(args) != 1 {
+			commandUsage("shellux spotify")
+		}
+		if err := playerui.Run(); err != nil {
+			commandError("open Spotify player", err)
+		}
+		return true
 	case "profile":
 		if len(args) != 2 || args[1] != "resolve" {
 			commandUsage("shellux profile resolve")
@@ -441,6 +465,58 @@ func runCommand(args []string) bool {
 	return true
 }
 
+func handleDashboardMouse(column, row int) error {
+	settings, err := config.LoadDefault()
+	if err != nil {
+		return err
+	}
+	rows, columns, err := profileTerminalSize()
+	if err != nil {
+		return err
+	}
+	if directory, err := os.Getwd(); err == nil {
+		settings = settings.EffectiveProfile(directory, columns, rows)
+	}
+	playback, err := systeminfo.PlaybackInfo()
+	if err != nil || !playback.Available {
+		return err
+	}
+	colors, err := theme.ByName(settings.Style)
+	if err != nil {
+		return err
+	}
+	eye := animation.Frame(animationByName(settings.Animation), 0)
+	if settings.RuntimeProfile == "minimal" {
+		eye = "•"
+	} else if settings.RuntimeProfile == "focus" {
+		eye = render.FocusClock(settings.FocusRemaining(time.Now()))
+		colors = theme.Focus()
+	}
+	layout := render.NewHeaderLayoutWithConfig(systeminfo.Snapshot{Playback: playback, Now: time.Now()}, eye, colors, settings, locale.Resolve(settings.Language)).FitTerminal(columns, rows)
+	target, hit := layout.PlaybackTargetAt(column, row)
+	if !hit {
+		return nil
+	}
+	if target.IsSeek {
+		return systeminfo.SeekPlayback(target.SeekTo)
+	}
+	return systeminfo.ControlPlayback(target.Action)
+}
+
+func dashboardHoverPosition(path string) (column, row int) {
+	if path == "" {
+		return 0, 0
+	}
+	data, err := os.ReadFile(path)
+	if err != nil || len(data) > 32 || len(data) == 0 {
+		return 0, 0
+	}
+	if _, err := fmt.Sscanf(string(data), "%d %d", &column, &row); err != nil || column < 1 || row != 1 {
+		return 0, 0
+	}
+	return column, row
+}
+
 func emitBackground(color string) bool {
 	if color == "" {
 		return false
@@ -498,6 +574,7 @@ const commandHelp = `Shellux commands:
   shellux on                      restore the header in this terminal tab
   shellux status                  show current theme and refresh settings
   shellux doctor                  check setup and renderer state
+  shellux spotify                 open interactive Spotify controls
   shellux exit                    exit the current shell
 
   shellux theme <name>            set matching animation, style and background
@@ -646,6 +723,7 @@ func isAnimation(name string) bool {
 }
 
 func watchHeader(interval time.Duration, settings, baseSettings config.Config, inPlace bool, parentPID int, selectedAnimation animation.Animation, selectedStyle theme.Theme, language locale.Language) {
+	hoverFile := os.Getenv("SHELLUX_HOVER_FILE")
 	visible := settings.Visible
 	baseStyle, _ := theme.ByName(baseSettings.Style)
 	var profileMu sync.RWMutex
@@ -670,6 +748,9 @@ func watchHeader(interval time.Duration, settings, baseSettings config.Config, i
 
 	frame := 0
 	lastFocusClock := ""
+	lastMarqueeStep := render.SpotifyMarqueeStep(time.Now())
+	lastDashboardWidth := 0
+	lastHoveredTitleColumn := 0
 	var snapshot systeminfo.Snapshot
 	snapshotCaptured := false
 	var trends systeminfo.TrendRecorder
@@ -716,6 +797,9 @@ func watchHeader(interval time.Duration, settings, baseSettings config.Config, i
 		snapshotMu.RLock()
 		currentSnapshot := snapshot
 		snapshotMu.RUnlock()
+		if settings.RuntimeProfile != "snapshot" {
+			currentSnapshot.Now = time.Now()
+		}
 		eye := animation.Frame(selectedAnimation, frame)
 		if settings.RuntimeProfile == "minimal" {
 			if frame%2 == 0 {
@@ -730,6 +814,10 @@ func watchHeader(interval time.Duration, settings, baseSettings config.Config, i
 		if inPlace {
 			layout = layout.FitTerminal(columns, rows)
 		}
+		if settings.RuntimeProfile != "snapshot" {
+			column, row := dashboardHoverPosition(hoverFile)
+			layout = layout.HoverTitle(column, row)
+		}
 		return layout
 	}
 	renderCompleteHeader := func(layout render.HeaderLayout) string {
@@ -743,8 +831,15 @@ func watchHeader(interval time.Duration, settings, baseSettings config.Config, i
 		if len(layout.Dashboard) > 0 {
 			output += terminal.Region(layout.Dashboard, 1, layout.DashboardColumn, layout.DashboardWidth)
 		}
+		lastDashboardWidth = layout.DashboardWidth
+		lastHoveredTitleColumn = layout.HoveredTitleColumn
 		reservedHeight = layout.Height()
 		return output
+	}
+	dashboardRegion := func(layout render.HeaderLayout) string {
+		width := max(lastDashboardWidth, layout.DashboardWidth)
+		lastDashboardWidth = layout.DashboardWidth
+		return terminal.Region(layout.Dashboard, 1, layout.DashboardColumn, width)
 	}
 	runner := live.Runner{
 		AnimationInterval: selectedAnimation.Interval(),
@@ -777,6 +872,9 @@ func watchHeader(interval time.Duration, settings, baseSettings config.Config, i
 		},
 		RenderInitial: func() (string, error) {
 			layout := layoutForFrame()
+			lastMarqueeStep = render.SpotifyMarqueeStep(time.Now())
+			lastDashboardWidth = layout.DashboardWidth
+			lastHoveredTitleColumn = layout.HoveredTitleColumn
 			if settings.RuntimeProfile == "focus" {
 				lastFocusClock = strings.Join(layout.Eye, "\n")
 			}
@@ -785,7 +883,7 @@ func watchHeader(interval time.Duration, settings, baseSettings config.Config, i
 				return terminal.MaintainHeader(layout.Height()) +
 					terminal.Region(layout.EyeRegion(), 1, 1, layout.EyeWidth) +
 					headerGutter(layout) +
-					terminal.Region(layout.Dashboard, 1, layout.DashboardColumn, layout.DashboardWidth), nil
+					dashboardRegion(layout), nil
 			}
 			return terminal.FullScreen(layout.String()), nil
 		},
@@ -799,9 +897,15 @@ func watchHeader(interval time.Duration, settings, baseSettings config.Config, i
 			if settings.RuntimeProfile == "snapshot" {
 				return "", nil
 			}
+			marqueeStep := render.SpotifyMarqueeStep(time.Now())
+			marqueeChanged := layout.MarqueeActive && marqueeStep != lastMarqueeStep
+			lastMarqueeStep = marqueeStep
+			hoverChanged := layout.HoveredTitleColumn != lastHoveredTitleColumn
+			lastHoveredTitleColumn = layout.HoveredTitleColumn
 			if settings.RuntimeProfile == "focus" {
 				clock := strings.Join(layout.Eye, "\n")
-				if clock == lastFocusClock {
+				eyeChanged := clock != lastFocusClock
+				if !eyeChanged && !marqueeChanged && !hoverChanged {
 					return "", nil
 				}
 				lastFocusClock = clock
@@ -809,21 +913,36 @@ func watchHeader(interval time.Duration, settings, baseSettings config.Config, i
 				if inPlace {
 					prefix = terminal.MaintainHeader(layout.Height())
 				}
-				return prefix + terminal.Region(layout.EyeRegion(), 1, 1, layout.EyeWidth), nil
+				if eyeChanged {
+					prefix += terminal.Region(layout.EyeRegion(), 1, 1, layout.EyeWidth)
+				}
+				if marqueeChanged && !layout.Stacked() {
+					prefix += dashboardRegion(layout)
+				} else if hoverChanged && !layout.Stacked() && len(layout.Dashboard) > 0 {
+					prefix += terminal.Region(layout.Dashboard[:1], 1, layout.DashboardColumn, layout.DashboardWidth)
+				}
+				return prefix, nil
 			}
 			prefix := ""
 			if inPlace {
 				prefix = terminal.MaintainHeader(layout.Height())
 			}
 			if settings.RuntimeProfile == "minimal" {
-				return prefix + terminal.Region(layout.Dashboard, 1, layout.DashboardColumn, layout.DashboardWidth), nil
+				return prefix + dashboardRegion(layout), nil
 			}
-			return prefix + terminal.Region(layout.EyeRegion(), 1, 1, layout.EyeWidth) + headerGutter(layout), nil
+			output := prefix + terminal.Region(layout.EyeRegion(), 1, 1, layout.EyeWidth) + headerGutter(layout)
+			if marqueeChanged {
+				output += dashboardRegion(layout)
+			} else if hoverChanged && len(layout.Dashboard) > 0 {
+				output += terminal.Region(layout.Dashboard[:1], 1, layout.DashboardColumn, layout.DashboardWidth)
+			}
+			return output, nil
 		},
 		RenderMetrics: func() (string, error) {
 			resized := inPlace && refreshSize()
 			focusEnded := refreshFocus()
 			layout := layoutForFrame()
+			lastHoveredTitleColumn = layout.HoveredTitleColumn
 			if resized || focusEnded {
 				return renderCompleteHeader(layout), nil
 			}
@@ -838,7 +957,7 @@ func watchHeader(interval time.Duration, settings, baseSettings config.Config, i
 				lastFocusClock = strings.Join(layout.Eye, "\n")
 				return prefix + terminal.Region(layout.EyeRegion(), 1, 1, layout.EyeWidth), nil
 			}
-			return prefix + headerGutter(layout) + terminal.Region(layout.Dashboard, 1, layout.DashboardColumn, layout.DashboardWidth), nil
+			return prefix + headerGutter(layout) + dashboardRegion(layout), nil
 		},
 		ResizeEvents: resizeEvents,
 		RenderResize: func() (string, error) {

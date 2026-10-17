@@ -1,9 +1,35 @@
 package config
 
 import (
+	"encoding/json"
 	"os"
+	"slices"
 	"testing"
 )
+
+func TestLegacyStandalonePlayerIsRemovedOnLoad(t *testing.T) {
+	legacy := Default()
+	legacy.Visible["spotify-player"] = true
+	legacy.MenuLayout.Items["SESSION"] = append(legacy.MenuLayout.Items["SESSION"], "spotify-player")
+	legacy.MenuPresets = map[string]SavedMenuPreset{
+		"music": {Visible: map[string]bool{"spotify-player": true}, Layout: cloneSavedMenuPreset(SavedMenuPreset{Layout: legacy.MenuLayout}).Layout},
+	}
+	data, err := json.Marshal(legacy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := decodeConfig(data)
+	if err != nil {
+		t.Fatalf("load old Player config: %v", err)
+	}
+	if _, exists := loaded.Visible["spotify-player"]; exists || slices.Contains(loaded.MenuLayout.Items["SESSION"], "spotify-player") {
+		t.Fatal("standalone Player survived migration")
+	}
+	preset := loaded.MenuPresets["music"]
+	if _, exists := preset.Visible["spotify-player"]; exists || slices.Contains(preset.Layout.Items["SESSION"], "spotify-player") {
+		t.Fatal("standalone Player survived saved-preset migration")
+	}
+}
 
 func TestNewComponentsPreserveDefaultsAndPersist(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
@@ -363,6 +389,22 @@ func TestCoresPartsPersistAndRespectEntryLimit(t *testing.T) {
 	}
 	if _, err := SetDisplay("cores", "bar", true); err == nil {
 		t.Fatal("restoring cores exceeded entry limit")
+	}
+}
+
+func TestSpotifyAlbumAndProgressSkipDefaults(t *testing.T) {
+	c := Default()
+	if Shown(c.Visible, "spotify.album") || !Shown(c.Visible, "spotify.track") || !Shown(c.Visible, "progress.playback") || !Shown(c.Visible, "progress.skip") {
+		t.Fatal("unexpected Spotify or Progress detail defaults")
+	}
+	if err := c.ChangeDisplay("spotify", "album", true); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.ChangeDisplay("progress", "skip", false); err != nil {
+		t.Fatal(err)
+	}
+	if !Shown(c.Visible, "spotify.album") || Shown(c.Visible, "progress.skip") || !EntryShown(c.Visible, "spotify") || !EntryShown(c.Visible, "progress") {
+		t.Fatal("detail switches changed the parent rows")
 	}
 }
 

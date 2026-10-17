@@ -4,8 +4,8 @@
 # Define the alias before DEBUG is installed, so startup does not pause itself.
 alias shx='shellux reload'
 
-if ! declare -F shellux_prompt >/dev/null 2>&1 || (( ${shellux_integration_version:-0} < 25 )); then
-  shellux_integration_version=25
+if ! declare -F shellux_prompt >/dev/null 2>&1 || (( ${shellux_integration_version:-0} < 28 )); then
+  shellux_integration_version=28
   : "${shellux_enabled:=1}"
   : "${shellux_render_header:=1}"
   : "${shellux_clear_startup_scrollback:=1}"
@@ -178,7 +178,7 @@ if ! declare -F shellux_prompt >/dev/null 2>&1 || (( ${shellux_integration_versi
   shellux() {
     case "${1:-}" in
       "") shellux_reload ;;
-      settings) shellux_settings "$@" ;;
+      settings|spotify) shellux_settings "$@" ;;
       show|background)
         if (( $# == 1 )); then
           shellux_show_output "$@"

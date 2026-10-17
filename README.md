@@ -10,7 +10,7 @@ System stats, music, and your own look right in the terminal, with your familiar
 - **System overview:** CPU, RAM, storage, battery, network, and more.
 - **Flexible display:** Toggle individual items and details such as bars, percentages, and time zones.
 - **Your own look:** Animated themes with matching styles and backgrounds. Mix and match or save your own theme.
-- **Spotify:** Current track and playback progress on macOS.
+- **Spotify:** Current track, playback progress and an interactive control panel on macOS.
 - **Visual settings:** Customize everything with your keyboard inside the terminal.
 
 ## Installation
@@ -129,6 +129,22 @@ not fetch; missing tools, repositories, upstreams, or shell command data show
 command duration has whole-second resolution and requires the sourced Zsh/Bash
 integration; the header still waits for an explicit reload after normal command
 output.
+The **SESSION → Spotify** row shows the current artist and title in a 21-column
+field. Longer text scrolls left and loops back in from the right. Its optional
+**Album** detail switch shows the full album name fixed to the right of the scrolling
+text (off by default). The row expands when needed and is clipped at the terminal edge. The
+**Progress** row shows playback time and a clickable progress bar for seeking,
+followed by previous and next controls under one **Skip buttons** switch when the local Spotify desktop app is
+running. Its leading play/pause symbol is clickable too. In a sourced Zsh shell,
+click the symbols directly in the pinned dashboard while the prompt is idle.
+In sourced Zsh, hovering over a letter in **S H E L L U X** inverts
+that letter; moving away restores it. This uses terminal mouse-motion reports.
+Mouse reporting is active only while Shellux owns the prompt; hold Shift when
+selecting text in terminals that reserve ordinary dragging for mouse reports.
+Shellux disables mouse reporting before commands and full-screen apps run.
+The existing `shellux spotify` panel remains a keyboard fallback, including in
+Bash, where the system Readline cannot safely route dashboard clicks. Its
+**T** shortcut toggles playback.
 Under **General → Language**, choose **Automatic (system)**, **English**, or
 **Deutsch** for the dashboard and settings. Automatic uses the system/terminal
 locale, with English as the fallback for other languages. Commands stay unchanged.

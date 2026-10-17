@@ -1,8 +1,8 @@
 # Shellux integration for Zsh.
 # Source this file from .zshrc after installing the shellux binary.
 
-if (( $+functions[shellux_prompt] == 0 || ${shellux_integration_version:-0} < 25 )); then
-  typeset -g shellux_integration_version=25
+if (( $+functions[shellux_prompt] == 0 || ${shellux_integration_version:-0} < 28 )); then
+  typeset -g shellux_integration_version=28
   typeset -g shellux_enabled="${shellux_enabled:-1}"
   typeset -g shellux_render_header="${shellux_render_header:-1}"
   typeset -g shellux_clear_startup_scrollback="${shellux_clear_startup_scrollback:-1}"
@@ -14,6 +14,9 @@ if (( $+functions[shellux_prompt] == 0 || ${shellux_integration_version:-0} < 25
   typeset -g shellux_profile_dir=""
   typeset -g shellux_profile_active=""
   typeset -g shellux_watch_before_command=0
+  typeset -g shellux_hover_file="${shellux_hover_file:-}"
+  typeset -g shellux_hover_column=0
+  typeset -g shellux_hover_row=0
 
   shellux_set_title() {
     # OSC 0 names both the terminal window and its tab. Never emit it to pipes.
@@ -26,7 +29,13 @@ if (( $+functions[shellux_prompt] == 0 || ${shellux_integration_version:-0} < 25
     if [[ -n "$shellux_watch_pid" ]] && kill -0 "$shellux_watch_pid" 2>/dev/null; then
       return 0
     fi
-    command "${SHELLUX_BIN:-shellux}" --watch --in-place --parent-pid $$ </dev/null >/dev/tty 2>/dev/null &!
+    if [[ -z "$shellux_hover_file" || ! -f "$shellux_hover_file" ]]; then
+      shellux_hover_file=$(mktemp "${TMPDIR:-/tmp}/shellux-hover.XXXXXXXX") || shellux_hover_file=""
+    fi
+    if [[ -n "$shellux_hover_file" ]]; then
+      printf '0 0\n' >| "$shellux_hover_file"
+    fi
+    SHELLUX_HOVER_FILE="$shellux_hover_file" command "${SHELLUX_BIN:-shellux}" --watch --in-place --parent-pid $$ </dev/null >/dev/tty 2>/dev/null &!
     shellux_watch_pid=$!
   }
 
@@ -102,6 +111,64 @@ if (( $+functions[shellux_prompt] == 0 || ${shellux_integration_version:-0} < 25
     fi
     shellux_watch_pid=""
   }
+  shellux_mouse_start() {
+    [[ -t 1 ]] || return 0
+    (( shellux_enabled && ! shellux_output_mode && ! shellux_command_paused )) || return 0
+    # Mouse reports go to ZLE only while the dashboard is visible at the prompt.
+    if [[ -n "$shellux_hover_file" ]]; then
+      printf '\033[?1003h\033[?1006h' >/dev/tty
+    else
+      printf '\033[?1000h\033[?1006h' >/dev/tty
+    fi
+  }
+  shellux_mouse_stop() {
+    [[ -t 1 ]] || return 0
+    printf '\033[?1000l\033[?1003l\033[?1006l' >/dev/tty
+    shellux_hover_column=0
+    shellux_hover_row=0
+    [[ -n "$shellux_hover_file" && -f "$shellux_hover_file" ]] && printf '0 0\n' >| "$shellux_hover_file"
+    return 0
+  }
+  shellux_mouse_widget() {
+    local packet='' character button column row index result
+    local -a coordinates
+    for (( index = 0; index < 32; index++ )); do
+      read -t 0.1 -k 1 character || break
+      packet+=$character
+      [[ "$character" == M || "$character" == m ]] && break
+    done
+    if [[ "$packet" == *M ]]; then
+      coordinates=("${(@s:;:)${packet%M}}")
+      button=${coordinates[1]}
+      column=${coordinates[2]}
+      row=${coordinates[3]}
+      if [[ ${#coordinates} == 3 && "$button" == <-> && "$column" == <-> && "$row" == <-> ]]; then
+        if (( button & 32 )); then
+          if [[ -n "$shellux_hover_file" && -f "$shellux_hover_file" ]]; then
+            if (( row != 1 )); then
+              column=0
+              row=0
+            fi
+            if (( column != shellux_hover_column || row != shellux_hover_row )); then
+              shellux_hover_column=$column
+              shellux_hover_row=$row
+              printf '%s %s\n' "$column" "$row" >| "$shellux_hover_file"
+            fi
+          fi
+          return 0
+        fi
+        if (( button == 0 )); then
+          result=$(command "${SHELLUX_BIN:-shellux}" mouse "$column" "$row" 2>&1) || zle -M "$result"
+        fi
+      fi
+    fi
+    zle redisplay
+  }
+  shellux_hover_cleanup() {
+    [[ -n "$shellux_hover_file" ]] && rm -f -- "$shellux_hover_file"
+    shellux_hover_file=""
+    return 0
+  }
   shellux_reload() {
     if (( ! shellux_enabled )); then
       print -u2 "shellux: header is off; run 'shellux on'"
@@ -132,6 +199,7 @@ if (( $+functions[shellux_prompt] == 0 || ${shellux_integration_version:-0} < 25
     shellux_output_mode=0
     shellux_command_paused=0
     shellux_watch_before_command=0
+    shellux_hover_cleanup
     printf '\033[r\033[H\033[2J'
   }
   shellux_on() {
@@ -184,7 +252,7 @@ if (( $+functions[shellux_prompt] == 0 || ${shellux_integration_version:-0} < 25
   shellux() {
     case "${1:-}" in
       "") shellux_reload ;;
-      settings) shellux_settings "$@" ;;
+      settings|spotify) shellux_settings "$@" ;;
       show|background)
         if (( $# == 1 )); then
           shellux_show_output "$@"
@@ -278,6 +346,19 @@ if (( $+functions[shellux_prompt] == 0 || ${shellux_integration_version:-0} < 25
   add-zsh-hook -d preexec shellux_before_command 2>/dev/null || true
   add-zsh-hook precmd shellux_prompt
   add-zsh-hook preexec shellux_before_command
+  add-zsh-hook -d zshexit shellux_hover_cleanup 2>/dev/null || true
+  add-zsh-hook zshexit shellux_hover_cleanup
+  if [[ -o interactive ]]; then
+    autoload -Uz add-zle-hook-widget
+    add-zle-hook-widget -d line-init shellux_mouse_start 2>/dev/null || true
+    add-zle-hook-widget -d line-finish shellux_mouse_stop 2>/dev/null || true
+    add-zle-hook-widget line-init shellux_mouse_start || true
+    add-zle-hook-widget line-finish shellux_mouse_stop || true
+    zle -N shellux_mouse_widget
+    bindkey -M emacs '\e[<' shellux_mouse_widget
+    bindkey -M viins '\e[<' shellux_mouse_widget
+    bindkey -M vicmd '\e[<' shellux_mouse_widget
+  fi
   if (( $+functions[TRAPWINCH] == 0 )); then
     TRAPWINCH() { shellux_handle_resize }
   fi

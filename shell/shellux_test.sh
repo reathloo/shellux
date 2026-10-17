@@ -30,7 +30,7 @@ if [[ "$1" == bash ]]; then
   PROMPT_COMMAND=(foreign_prompt_one foreign_prompt_two)
   shellux_integration_version=19
   source "shell/shellux.bash"
-  equal "$shellux_integration_version" 25 'existing Bash integration upgrades'
+  equal "$shellux_integration_version" 28 'existing Bash integration upgrades'
   eval "${PROMPT_COMMAND[0]}"
   equal "$shellux_previous_debug_trap" foreign_debug_hook 'existing Bash DEBUG hook is preserved'
   case "$(trap -p DEBUG)" in
@@ -54,7 +54,7 @@ if [[ "$1" == zsh ]]; then
   add-zsh-hook precmd foreign_precmd_hook
   shellux_integration_version=19
   source "shell/shellux.zsh"
-  equal "$shellux_integration_version" 25 'existing Zsh integration upgrades'
+  equal "$shellux_integration_version" 28 'existing Zsh integration upgrades'
   [[ " ${preexec_functions[*]} " == *' foreign_preexec_hook '* ]] || fail 'existing Zsh preexec hook was removed'
   [[ " ${precmd_functions[*]} " == *' foreign_precmd_hook '* ]] || fail 'existing Zsh precmd hook was removed'
 fi

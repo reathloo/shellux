@@ -225,7 +225,7 @@ func (c Config) EffectiveProfile(directory string, size ...int) Config {
 		for _, name := range []string{"time", "cpu", "ram", "spotify", "progress"} {
 			effective.Visible[name] = true
 		}
-		for _, name := range []string{"cpu.percent", "ram.percent"} {
+		for _, name := range []string{"cpu.percent", "ram.percent", "spotify.track", "progress.playback", "progress.skip"} {
 			effective.Visible[name] = true
 		}
 		effective.MenuLayout = defaultMenuLayout()

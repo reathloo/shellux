@@ -101,6 +101,16 @@ func cloneStringSlices(source map[string][]string) map[string][]string {
 	return result
 }
 
+// removeLegacyPlayer drops the short-lived standalone Player row when loading
+// configurations saved before playback controls moved into Spotify/Progress.
+func removeLegacyPlayer(layout MenuLayout) MenuLayout {
+	for group, items := range layout.Items {
+		layout.Items[group] = slices.DeleteFunc(items, func(item string) bool { return item == "spotify-player" })
+	}
+	delete(layout.Components, "spotify-player")
+	return layout
+}
+
 // completeMenuLayout migrates configurations written before ordering existed
 // and fills fields added by newer Shellux versions without changing old choices.
 func completeMenuLayout(layout MenuLayout) MenuLayout {
@@ -334,6 +344,10 @@ func DisplayParts(name string) []string {
 		return []string{"client", "server"}
 	case "remote-terminal":
 		return []string{"tty", "term"}
+	case "spotify":
+		return []string{"track", "album"}
+	case "progress":
+		return []string{"playback", "skip"}
 	}
 	for _, item := range menuItems {
 		if item.name == name && item.parts {
@@ -394,6 +408,7 @@ func PartLabel(name, part string) string {
 		"go": "Go", "node": "Node", "python": "Python", "java": "Java",
 		"docker": "Docker", "kubernetes": "Kubernetes", "duration": "Duration", "exit": "Exit code",
 		"user": "User", "host": "Host", "client": "Client", "server": "Server", "tty": "TTY", "term": "Terminal type",
+		"track": "Artist + title", "album": "Album", "playback": "Time + seek bar", "skip": "Skip buttons",
 	}
 	return labels[part]
 }
@@ -411,7 +426,7 @@ func Shown(visible map[string]bool, name string) bool {
 		}
 	}
 	switch name {
-	case "cpu.sparkline", "cpu.top", "ram.sparkline", "ram.pressure", "battery.bar", "battery.sparkline", "battery.remaining", "volume.remaining", "network-status.connection", "network-status.name", "date.timezone", "date.utc", "network-traffic.sparkline", "network-traffic.latency":
+	case "cpu.sparkline", "cpu.top", "ram.sparkline", "ram.pressure", "battery.bar", "battery.sparkline", "battery.remaining", "volume.remaining", "network-status.connection", "network-status.name", "date.timezone", "date.utc", "network-traffic.sparkline", "network-traffic.latency", "spotify.album":
 		return false // New optional details preserve the existing header.
 	}
 	return true // Original component switches default to on.
