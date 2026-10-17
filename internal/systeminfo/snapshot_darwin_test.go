@@ -13,7 +13,7 @@ import (
 func TestPlaybackQueryFollowsVisibleEntries(t *testing.T) {
 	dir := t.TempDir()
 	counter := filepath.Join(dir, "calls")
-	script := "#!/bin/sh\nprintf x >> '" + counter + "'\nprintf 'Track\\037Artist\\03760000\\0371\\037playing'\n"
+	script := "#!/bin/sh\nprintf x >> '" + counter + "'\nprintf 'Track\\037Artist\\037Album\\03760000\\0371\\037playing'\n"
 	if err := os.WriteFile(filepath.Join(dir, "osascript"), []byte(script), 0700); err != nil {
 		t.Fatal(err)
 	}
