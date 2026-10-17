@@ -11,7 +11,7 @@ import (
 	"github.com/reathloo/shellux/internal/locale"
 )
 
-var sections = []string{"Menu items", "Menu layouts", "Themes", "Appearance", "General"}
+var sections = []string{"Menu items", "Menu layouts", "Themes", "Appearance", "General", "Doctor"}
 
 func fit(s string, width int) string { return ansi.Truncate(s, max(0, width), "…") }
 func line(s string, width int) string {
@@ -81,7 +81,9 @@ func (m *model) mainView(width, height int, styles uiStyles) string {
 		nav[i] = line("", 18)
 		content[i] = line("", rw)
 	}
-	for i, name := range sections {
+	navStart, navEnd := window(len(sections), m.section, min(bodyHeight, len(sections)))
+	for i := navStart; i < navEnd; i++ {
+		name := sections[i]
 		prefix := "  "
 		if i == m.section {
 			prefix = "› "
@@ -96,7 +98,7 @@ func (m *model) mainView(width, height int, styles uiStyles) string {
 		} else {
 			text = styles.secondary.Render(text)
 		}
-		nav[i] = text
+		nav[i-navStart] = text
 	}
 	if bodyHeight > 6 {
 		nav[6] = muted.Render(line(fmt.Sprintf(m.tr("%d / 11 slots"), config.MenuSlots(m.draft.Visible)), 18))
@@ -134,7 +136,7 @@ func (m *model) mainView(width, height int, styles uiStyles) string {
 			text = prefix + m.tr(r.label)
 			if r.value != "" && r.action != "theme" && r.action != "preset" {
 				value := r.value
-				if r.action == "language" {
+				if r.action == "language" || m.section == doctorSection {
 					value = m.tr(value)
 				}
 				text += "  · " + value
@@ -171,6 +173,9 @@ func (m *model) mainView(width, height int, styles uiStyles) string {
 		description = m.menuHelp(selectedRow.entry.Key, part)
 	}
 	status := m.tr("Changes are applied only when you save.")
+	if m.section == doctorSection {
+		status = m.tr("Doctor repairs run immediately after confirmation.")
+	}
 	if m.notice != "" {
 		description = m.tr(m.notice)
 		status = m.tr("Notice")
@@ -202,6 +207,9 @@ func (m *model) mainView(width, height int, styles uiStyles) string {
 	}
 	if m.focus == 1 && m.section == themesSection {
 		help = m.tr("↑/↓: theme · Enter: apply · F: favorite · U: uninstall")
+	}
+	if m.focus == 1 && m.section == doctorSection {
+		help = m.tr("↑/↓: check · Enter: scan or repair · Esc: back")
 	}
 	return strings.Join([]string{
 		line(styles.heading(title, 0), width), line("", width), strings.Join(body, "\n"), line("", width),

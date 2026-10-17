@@ -42,9 +42,15 @@ changing it automatically.
 shellux settings
 ```
 
-Explore **Menu items**, **Menu layouts**, **Themes**, **Appearance**, and
-**General** to choose what appears, save menu presets, select themes, set custom
+Explore **Menu items**, **Menu layouts**, **Themes**, **Appearance**, **General**,
+and **Doctor** to choose what appears, save menu presets, select themes, set custom
 colors, and change the refresh interval.
+**Doctor** checks the installed Zsh/Bash integration, downloaded theme packages,
+owner permissions on Shellux files, and orphaned live-renderer processes. Scanning
+does not change anything or access the network. A repair is offered only when
+Shellux can identify a safe target and requires confirmation; theme repair may
+download verified packages, while permission repair never uses administrator
+privileges. Open a new terminal tab after repairing the shell integration.
 Under **Menu layouts**, save the current menu as a named layout, apply a saved
 layout or delete it. A layout includes visible items, detail switches and their
 order; it does not change the theme, colors, language or refresh interval.

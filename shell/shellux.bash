@@ -139,7 +139,7 @@ if ! declare -F shellux_prompt >/dev/null 2>&1 || (( ${shellux_integration_versi
     shellux_output_mode=1
     shellux_command_paused=1
     local settings_result=0
-    command "${SHELLUX_BIN:-shellux}" "$@" || settings_result=$?
+    SHELLUX_DIAG_VERSION="$shellux_integration_version" command "${SHELLUX_BIN:-shellux}" "$@" || settings_result=$?
     case "$settings_result" in
       0)
         if (( shellux_enabled )); then shellux_reload; fi

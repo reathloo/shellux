@@ -130,6 +130,20 @@ def check_shell(shell):
             assert b"\x1b[3J" not in output, "cancellation cleared scrollback"
             assert not config_path.exists()
             assert b"EXIT_0" in command("printf 'EXIT_%s\\n' $?")
+            # Doctor scans without saving, then repairs only after confirmation.
+            start, before = open_ui()
+            os.write(fd, b"\x1b[B" * 5)  # Doctor section
+            wait_for(b"Shell integration", start)
+            wait_for(b"Theme packages", start)
+            assert not (Path(data_dir) / "shellux/shell/shellux.zsh").exists()
+            os.write(fd, b"\r\x1b[B\r")  # focus rows, select shell integration
+            wait_for(b"Repair Shell integration now?", start)
+            os.write(fd, b"\x1b[C\r")  # confirm repair
+            wait_for(b"Repair complete", start)
+            assert (Path(data_dir) / "shellux/shell/shellux.zsh").read_bytes() == (REPO / "shell/shellux.zsh").read_bytes()
+            assert (Path(data_dir) / "shellux/shell/shellux.bash").read_bytes() == (REPO / "shell/shellux.bash").read_bytes()
+            close_ui(b"\x1b", len(raw), before, 0)
+            assert not config_path.exists(), "Doctor repair wrote settings"
             # Dirty cancellation defaults to continue editing; then discard.
             start, before = open_ui()
             os.write(fd, b"\t ")

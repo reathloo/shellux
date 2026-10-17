@@ -14,6 +14,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/term"
 	"github.com/reathloo/shellux/internal/config"
+	"github.com/reathloo/shellux/internal/doctor"
 	"github.com/reathloo/shellux/internal/themepack"
 )
 
@@ -30,6 +31,7 @@ const (
 	themesSection
 	appearanceSection
 	generalSection
+	doctorSection
 	sectionCount
 )
 
@@ -46,6 +48,9 @@ func Run() (int, config.Config, error) {
 	m.ensure = func(ctx context.Context, c config.Config) error { return c.EnsurePackages(ctx) }
 	m.refresh = true
 	defer func() {
+		if m.cancelDoctor != nil {
+			m.cancelDoctor()
+		}
 		if m.cancelDownload != nil {
 			m.cancelDownload()
 		}
@@ -98,10 +103,17 @@ type model struct {
 	refresh, refreshStarted bool
 	installedThemes         map[string]bool
 	checkInstalled          func(string) bool
+	doctorChecks            []doctor.Check
+	doctorBusy              bool
+	doctorCancelled         bool
+	doctorID                int
+	cancelDoctor            context.CancelFunc
+	doctorScan              func(context.Context) []doctor.Check
+	doctorFix               func(context.Context, string) error
 }
 
 func newModel(c config.Config, save func(config.Config) error) *model {
-	m := &model{original: c.Clone(), draft: c.Clone(), save: save, width: 96, height: 30, result: Cancelled, checkInstalled: themepack.IsInstalled}
+	m := &model{original: c.Clone(), draft: c.Clone(), save: save, width: 96, height: 30, result: Cancelled, checkInstalled: themepack.IsInstalled, doctorScan: doctor.Scan, doctorFix: doctor.Repair}
 	m.cursors[0] = 1 // first row is the SYSTEM heading
 	return m
 }
@@ -158,6 +170,21 @@ func (m *model) cancel() tea.Cmd {
 
 func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case doctorResult:
+		if msg.id != m.doctorID {
+			return m, nil
+		}
+		m.doctorBusy = false
+		m.cancelDoctor = nil
+		m.doctorChecks = msg.checks
+		if m.doctorCancelled {
+			m.notice = m.tr("Doctor stopped. Re-scan to inspect any completed changes.")
+		} else if msg.err != nil {
+			m.notice = m.tr("Doctor repair failed: ") + friendly(msg.err)
+		} else if msg.repaired {
+			m.notice = m.tr("Repair complete. Open a new terminal tab if shell integration changed.")
+		}
+		return m, nil
 	case downloadResult:
 		if msg.id != m.downloadID || !m.downloading {
 			return m, nil
@@ -199,6 +226,19 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case tea.KeyPressMsg:
 		key := msg.String()
+		if m.doctorBusy {
+			if key == "esc" || key == "ctrl+c" {
+				if m.cancelDoctor != nil {
+					m.cancelDoctor()
+				}
+				m.doctorCancelled = true
+				m.notice = m.tr("Stopping Doctor… completed changes may remain.")
+				if key == "ctrl+c" {
+					return m, m.finish(Interrupted)
+				}
+			}
+			return m, nil
+		}
 		if m.downloading {
 			if key == "ctrl+c" {
 				m.cancelDownload()
@@ -296,6 +336,9 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.part = 0
 				if m.section == themesSection && m.refresh && !m.refreshStarted {
 					return m, m.refreshCatalog()
+				}
+				if m.section == doctorSection && m.doctorChecks == nil {
+					return m, m.runDoctorScan()
 				}
 			} else if m.focus == 1 {
 				m.moveRow(step)
@@ -451,6 +494,26 @@ func (m *model) rows() []row {
 			{label: "Style", action: "style", value: config.DisplayStyle(m.draft.Style), description: "Choose header colors independently of the theme."},
 			{label: "Background", action: "background", value: m.draft.BackgroundName(), color: m.draft.Background, description: "Named colors, theme backgrounds, profile color or a custom RGB color."},
 		}
+	case doctorSection:
+		rows := []row{{label: "Scan again", action: "doctor-scan", description: "Check installed shell integration, theme packages, file permissions and orphaned watchers without changing anything."}}
+		for _, check := range m.doctorChecks {
+			status := "OK"
+			if check.State == "warning" {
+				status = "Needs attention"
+			}
+			if check.State == "unknown" {
+				status = "Could not check"
+			}
+			action := "doctor-info"
+			if check.Repairable {
+				action = "doctor-repair"
+			}
+			rows = append(rows, row{label: doctorLabel(check.Key), action: action, value: status, description: m.doctorDescription(check), entry: config.MenuEntry{Key: check.Key}})
+		}
+		if m.doctorBusy {
+			rows = append(rows, row{label: "Checking…", action: "doctor-info", description: "The current Doctor operation is still running. Esc cancels it."})
+		}
+		return rows
 	default:
 		return []row{{label: "Refresh interval", action: "interval", value: m.draft.RefreshInterval, description: "A positive Go duration, such as 1s, 500ms or 2.5s."}, {label: "Language", action: "language", value: languageName(m.draft.Language), description: "Choose the dashboard and settings language. Automatic follows your system locale."}}
 	}
@@ -526,6 +589,23 @@ func (m *model) activate() tea.Cmd {
 	m.notice = ""
 	r := m.selectedRow()
 	switch r.action {
+	case "doctor-scan":
+		return m.runDoctorScan()
+	case "doctor-repair":
+		title := "Repair %s now?"
+		if r.entry.Key == doctor.Themes {
+			title = "Redownload damaged themes now?"
+		}
+		if r.entry.Key == doctor.Watchers {
+			title = "Stop orphaned watchers now?"
+		}
+		translatedTitle := m.tr(title)
+		if strings.Contains(title, "%s") {
+			translatedTitle = fmt.Sprintf(translatedTitle, m.tr(doctorLabel(r.entry.Key)))
+		}
+		m.modal = &dialog{kind: "confirm", title: translatedTitle, action: "doctor-repair", value: r.entry.Key}
+	case "doctor-info":
+		m.notice = r.description
 	case "toggle":
 		p := ""
 		if m.part >= 2 {
@@ -696,6 +776,9 @@ func (m *model) updateDialog(msg tea.Msg) tea.Cmd {
 				if _, err := m.draft.StoreMenuPreset(d.value); err != nil {
 					m.notice = friendly(err)
 				}
+			case "doctor-repair":
+				m.modal = nil
+				return m.runDoctorRepair(d.value)
 			}
 			m.modal = nil
 		}
@@ -766,6 +849,87 @@ type downloadResult struct {
 	id  int
 	err error
 }
+type doctorResult struct {
+	id       int
+	checks   []doctor.Check
+	err      error
+	repaired bool
+}
+
+func (m *model) runDoctorScan() tea.Cmd {
+	if m.doctorBusy {
+		return nil
+	}
+	m.notice = ""
+	m.doctorCancelled = false
+	ctx, cancel := context.WithCancel(context.Background())
+	m.cancelDoctor, m.doctorBusy = cancel, true
+	m.doctorID++
+	id, scan := m.doctorID, m.doctorScan
+	return func() tea.Msg { return doctorResult{id: id, checks: scan(ctx)} }
+}
+
+func (m *model) runDoctorRepair(key string) tea.Cmd {
+	if m.doctorBusy {
+		return nil
+	}
+	m.doctorCancelled = false
+	ctx, cancel := context.WithCancel(context.Background())
+	m.cancelDoctor, m.doctorBusy = cancel, true
+	m.doctorID++
+	id, fix, scan := m.doctorID, m.doctorFix, m.doctorScan
+	return func() tea.Msg {
+		err := fix(ctx, key)
+		if ctx.Err() != nil {
+			return doctorResult{id: id, err: ctx.Err()}
+		}
+		return doctorResult{id: id, checks: scan(ctx), err: err, repaired: err == nil}
+	}
+}
+
+func doctorLabel(key string) string {
+	switch key {
+	case doctor.Integration:
+		return "Shell integration"
+	case doctor.Themes:
+		return "Theme packages"
+	case doctor.Permissions:
+		return "File permissions"
+	case doctor.Watchers:
+		return "Watchers"
+	}
+	return key
+}
+
+func (m *model) doctorDescription(check doctor.Check) string {
+	detail := m.tr(check.Detail)
+	for _, prefix := range []string{"Missing or outdated: ", "Damaged: ", "Insufficient owner permissions: ", "Orphaned watcher PID(s): "} {
+		if strings.HasPrefix(check.Detail, prefix) {
+			detail = m.tr(prefix) + strings.TrimPrefix(check.Detail, prefix)
+			break
+		}
+	}
+	detail = strings.ReplaceAll(detail, "current shell is version", m.tr("current shell is version"))
+	detail = strings.ReplaceAll(detail, "(open a new tab after repair)", m.tr("(open a new tab after repair)"))
+	if !check.Repairable {
+		if check.State == "warning" {
+			return detail + m.tr(" Fix this path manually; Doctor will not change it.")
+		}
+		return detail
+	}
+	switch check.Key {
+	case doctor.Integration:
+		return detail + m.tr(" Enter replaces installed shell scripts; reopen your terminal tab afterward.")
+	case doctor.Themes:
+		return detail + m.tr(" Enter downloads verified replacement packages over HTTPS.")
+	case doctor.Permissions:
+		return detail + m.tr(" Enter restores owner access on your Shellux files only; no sudo.")
+	case doctor.Watchers:
+		return detail + m.tr(" Enter stops only matching orphaned Shellux watchers.")
+	}
+	return detail
+}
+
 type catalogResult struct {
 	catalog themepack.Catalog
 	updated int
