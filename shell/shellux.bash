@@ -14,6 +14,8 @@ if ! declare -F shellux_prompt >/dev/null 2>&1 || (( ${shellux_integration_versi
   : "${shellux_command_paused:=0}"
   : "${shellux_watch_pid:=}"
   shellux_command_started=
+  shellux_last_command=
+  shellux_prompt_histcmd=
   shellux_profile_dir=
   shellux_profile_active=
   shellux_watch_before_command=0
@@ -35,6 +37,7 @@ if ! declare -F shellux_prompt >/dev/null 2>&1 || (( ${shellux_integration_versi
 
   shellux_prompt() {
     local shellux_status="${1:-$?}"
+    shellux_prompt_histcmd="${HISTCMD:-}"
     if [[ -n "$shellux_command_started" ]]; then
       export SHELLUX_LAST_COMMAND_STATUS="$shellux_status"
       export SHELLUX_LAST_COMMAND_SECONDS="$(( SECONDS - shellux_command_started ))"
@@ -236,6 +239,10 @@ if ! declare -F shellux_prompt >/dev/null 2>&1 || (( ${shellux_integration_versi
     # Bash may replay the most recent command before handling WINCH. Sourcing
     # Shellux itself is integration setup, not terminal output to preserve.
     [[ "$pending_command" == source\ *shellux.bash* || "$pending_command" == .\ *shellux.bash* ]] && return 0
+    # On WINCH, Bash can repeat DEBUG for the last completed command before
+    # invoking the signal trap. A new command has a new history index.
+    [[ -n "$shellux_last_command" && "$pending_command" == "$shellux_last_command" && \
+       -n "$shellux_prompt_histcmd" && "${HISTCMD:-}" == "$shellux_prompt_histcmd" ]] && return 0
     # With functrace enabled, DEBUG also fires for commands inside the
     # resize trap. Those commands must not stop the live renderer.
     [[ " ${FUNCNAME[*]} " == *" shellux_handle_resize "* ]] && return 0
@@ -247,6 +254,7 @@ if ! declare -F shellux_prompt >/dev/null 2>&1 || (( ${shellux_integration_versi
     (( shellux_enabled )) || return 0
     shellux_set_title
     shellux_watch_before_command=0
+    shellux_last_command="$pending_command"
     if [[ -n "$shellux_watch_pid" ]] && kill -0 "$shellux_watch_pid" 2>/dev/null; then
       shellux_watch_before_command=1
     fi
