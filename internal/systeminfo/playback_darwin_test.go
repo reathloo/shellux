@@ -11,6 +11,11 @@ import (
 )
 
 func TestSpotifyControlScriptsCompile(t *testing.T) {
+	// AppleScript resolves Spotify's scripting dictionary at compile time.
+	// CI macOS runners without Spotify cannot validate these scripts.
+	if output, err := exec.Command("osascript", "-e", `application id "com.spotify.client" is running`).CombinedOutput(); err != nil {
+		t.Skipf("Spotify scripting target unavailable: %v: %s", err, output)
+	}
 	readScript := filepath.Join(t.TempDir(), "read.scpt")
 	if output, err := exec.Command("osacompile", "-o", readScript, "-e", spotifyPlaybackScript).CombinedOutput(); err != nil {
 		t.Fatalf("compile playback AppleScript: %v: %s", err, output)
