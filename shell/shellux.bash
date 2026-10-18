@@ -240,9 +240,8 @@ if ! declare -F shellux_prompt >/dev/null 2>&1 || (( ${shellux_integration_versi
         "$shellux_watch_pid" "$shellux_output_mode" "$shellux_command_paused" >> "$SHELLUX_HOOK_DEBUG_FILE"
     fi
     # Bash runs DEBUG before PROMPT_COMMAND as well as user commands.
-    [[ "$pending_command" == shellux_previous_status=* || "$pending_command" == shellux_in_prompt=* ]] && return 0
+    [[ "$pending_command" == shellux_* ]] && return 0
     (( shellux_in_prompt )) && return 0
-    [[ "$pending_command" == shellux_prompt* || "$pending_command" == shellux_handle_resize* ]] && return 0
     # Bash may replay the most recent command before handling WINCH. Sourcing
     # Shellux itself is integration setup, not terminal output to preserve.
     [[ "$pending_command" == source\ *shellux.bash* || "$pending_command" == .\ *shellux.bash* ]] && return 0
