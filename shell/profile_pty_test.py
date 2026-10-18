@@ -73,7 +73,9 @@ def check(shell):
                 if expected in raw[start:]:
                     drain(0.35)
                     return bytes(raw[start:])
-            raise AssertionError((shell, "resize", columns, rows, expected, bytes(raw[start:])[-1500:]))
+            os.write(fd, b"declare -p shellux_watch_pid shellux_output_mode shellux_command_paused shellux_in_prompt shellux_in_resize\n")
+            drain(0.5)
+            raise AssertionError((shell, "resize", columns, rows, expected, bytes(raw[start:])[-2000:]))
 
         try:
             fcntl.ioctl(fd, termios.TIOCSWINSZ, struct.pack("HHHH", 40, 140, 0, 0))

@@ -13,6 +13,7 @@ if ! declare -F shellux_prompt >/dev/null 2>&1 || (( ${shellux_integration_versi
   : "${shellux_output_mode:=0}"
   : "${shellux_command_paused:=0}"
   : "${shellux_in_prompt:=0}"
+  : "${shellux_in_resize:=0}"
   : "${shellux_watch_pid:=}"
   shellux_command_started=
   shellux_profile_dir=
@@ -232,8 +233,8 @@ if ! declare -F shellux_prompt >/dev/null 2>&1 || (( ${shellux_integration_versi
   shellux_before_command() {
     local pending_command="${1:-${BASH_COMMAND:-}}"
     # Bash runs DEBUG before PROMPT_COMMAND as well as user commands.
-    [[ "$pending_command" == shellux_previous_status=* || "$pending_command" == shellux_in_prompt=* ]] && return 0
-    (( shellux_in_prompt )) && return 0
+    [[ "$pending_command" == shellux_previous_status=* || "$pending_command" == shellux_in_prompt=* || "$pending_command" == shellux_in_resize=* ]] && return 0
+    (( shellux_in_prompt || shellux_in_resize )) && return 0
     [[ "$pending_command" == shellux_prompt* || "$pending_command" == shellux_handle_resize* ]] && return 0
     # With functrace enabled, DEBUG also fires for commands inside the
     # resize trap. Those commands must not stop the live renderer.
@@ -303,7 +304,7 @@ if ! declare -F shellux_prompt >/dev/null 2>&1 || (( ${shellux_integration_versi
     fi
   }
   if [[ -z "$(trap -p WINCH)" ]]; then
-    trap 'shellux_handle_resize' WINCH
+    trap 'shellux_in_resize=1; shellux_handle_resize; shellux_in_resize=0' WINCH
   fi
   # DEBUG traps are scoped while a file is sourced. The first prompt performs
   # the final installation at the interactive shell level, independent of
