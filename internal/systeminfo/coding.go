@@ -31,6 +31,8 @@ var codingCommands = struct {
 	values map[string]commandSample
 }{values: make(map[string]commandSample)}
 
+var codingCommandTimeout = 2 * time.Second
+
 // codingOutput never starts a shell, asks for credentials, or waits indefinitely.
 // Results are cached to keep the live dashboard's one-second refresh cheap.
 func codingOutput(directory, name string, args ...string) string {
@@ -41,7 +43,7 @@ func codingOutput(directory, name string, args ...string) string {
 		return sample.output
 	}
 	codingCommands.Unlock()
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), codingCommandTimeout)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, name, args...)
 	cmd.Dir = directory

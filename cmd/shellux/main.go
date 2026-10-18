@@ -566,6 +566,7 @@ const commandHelp = `Shellux commands:
                                   M: move mode; Up/Down: section/item
                                   Left/Right: component, Enter: done
                                   Shift+Left/Right: move selected switch directly
+                                  Mouse/touchpad: click controls, scroll lists
                                   Ctrl+S: save and reload header (clear scrollback)
                                   Esc: cancel, Ctrl+C: discard
   shellux                         redraw the fixed header
@@ -725,6 +726,7 @@ func isAnimation(name string) bool {
 func watchHeader(interval time.Duration, settings, baseSettings config.Config, inPlace bool, parentPID int, selectedAnimation animation.Animation, selectedStyle theme.Theme, language locale.Language) {
 	hoverFile := os.Getenv("SHELLUX_HOVER_FILE")
 	visible := settings.Visible
+	metricsProfile := settings.RuntimeProfile
 	baseStyle, _ := theme.ByName(baseSettings.Style)
 	var profileMu sync.RWMutex
 	signalContext, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -753,6 +755,7 @@ func watchHeader(interval time.Duration, settings, baseSettings config.Config, i
 	lastHoveredTitleColumn := 0
 	var snapshot systeminfo.Snapshot
 	snapshotCaptured := false
+	snapshotPending := false // Protected by snapshotMu; render the first capture once.
 	var trends systeminfo.TrendRecorder
 	var snapshotMu sync.RWMutex
 	columns := 0
@@ -773,6 +776,7 @@ func watchHeader(interval time.Duration, settings, baseSettings config.Config, i
 				}
 				profileMu.Lock()
 				visible = settings.Visible
+				metricsProfile = settings.RuntimeProfile
 				profileMu.Unlock()
 				sizeInitialized = true
 			}
@@ -788,6 +792,7 @@ func watchHeader(interval time.Duration, settings, baseSettings config.Config, i
 		settings = baseSettings.EffectiveProfile(directory, columns, rows)
 		profileMu.Lock()
 		visible = settings.Visible
+		metricsProfile = settings.RuntimeProfile
 		profileMu.Unlock()
 		selectedStyle = baseStyle
 		emitBackground(settings.Background)
@@ -846,12 +851,13 @@ func watchHeader(interval time.Duration, settings, baseSettings config.Config, i
 		MetricsInterval:   interval,
 		Output:            os.Stdout,
 		UpdateMetrics: func() error {
-			if settings.RuntimeProfile == "snapshot" && snapshotCaptured {
-				return nil
-			}
 			profileMu.RLock()
 			currentVisible := visible
+			currentProfile := metricsProfile
 			profileMu.RUnlock()
+			if currentProfile == "snapshot" && snapshotCaptured {
+				return nil
+			}
 			updated, err := systeminfo.SnapshotInfoWithDisplay(currentVisible)
 			if err != nil {
 				return err
@@ -859,10 +865,9 @@ func watchHeader(interval time.Duration, settings, baseSettings config.Config, i
 			updated.Trends = trends.Observe(updated)
 			snapshotMu.Lock()
 			snapshot = updated
+			snapshotPending = currentProfile == "snapshot"
 			snapshotMu.Unlock()
-			if settings.RuntimeProfile == "snapshot" {
-				snapshotCaptured = true
-			}
+			snapshotCaptured = currentProfile == "snapshot"
 			return nil
 		},
 		AdvanceAnimation: func() {
@@ -872,6 +877,9 @@ func watchHeader(interval time.Duration, settings, baseSettings config.Config, i
 		},
 		RenderInitial: func() (string, error) {
 			layout := layoutForFrame()
+			snapshotMu.Lock()
+			snapshotPending = false
+			snapshotMu.Unlock()
 			lastMarqueeStep = render.SpotifyMarqueeStep(time.Now())
 			lastDashboardWidth = layout.DashboardWidth
 			lastHoveredTitleColumn = layout.HoveredTitleColumn
@@ -890,12 +898,12 @@ func watchHeader(interval time.Duration, settings, baseSettings config.Config, i
 		RenderAnimation: func() (string, error) {
 			resized := inPlace && refreshSize()
 			focusEnded := refreshFocus()
+			if settings.RuntimeProfile == "snapshot" && !resized && !focusEnded {
+				return "", nil
+			}
 			layout := layoutForFrame()
 			if resized || focusEnded {
 				return renderCompleteHeader(layout), nil
-			}
-			if settings.RuntimeProfile == "snapshot" {
-				return "", nil
 			}
 			marqueeStep := render.SpotifyMarqueeStep(time.Now())
 			marqueeChanged := layout.MarqueeActive && marqueeStep != lastMarqueeStep
@@ -941,13 +949,17 @@ func watchHeader(interval time.Duration, settings, baseSettings config.Config, i
 		RenderMetrics: func() (string, error) {
 			resized := inPlace && refreshSize()
 			focusEnded := refreshFocus()
+			snapshotMu.Lock()
+			captureReady := snapshotPending
+			snapshotPending = false
+			snapshotMu.Unlock()
+			if settings.RuntimeProfile == "snapshot" && !resized && !focusEnded && !captureReady {
+				return "", nil
+			}
 			layout := layoutForFrame()
 			lastHoveredTitleColumn = layout.HoveredTitleColumn
-			if resized || focusEnded {
+			if resized || focusEnded || (settings.RuntimeProfile == "snapshot" && captureReady) {
 				return renderCompleteHeader(layout), nil
-			}
-			if settings.RuntimeProfile == "snapshot" {
-				return "", nil
 			}
 			prefix := ""
 			if inPlace {

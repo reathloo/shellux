@@ -49,3 +49,11 @@ jobs:
         run: go build -o "$RUNNER_TEMP/shellux" ./cmd/shellux
       - name: Test interactive settings
         run: python3 shell/settings_pty_test.py "$RUNNER_TEMP/shellux"
+      - name: Test profile transitions
+        run: python3 shell/profile_pty_test.py "$RUNNER_TEMP/shellux"
+      - name: Test dashboard mouse routing
+        run: python3 shell/mouse_pty_test.py
+      - name: Test concurrent live rendering
+        run: |
+          go build -race -o "$RUNNER_TEMP/shellux-race" ./cmd/shellux
+          python3 shell/watch_pty_test.py "$RUNNER_TEMP/shellux-race"

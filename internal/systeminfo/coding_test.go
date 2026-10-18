@@ -6,9 +6,15 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestCodingInfoUsesEnabledLocalTools(t *testing.T) {
+	// Busy CI runners can delay child processes; this test checks selection and
+	// parsing, while production probes retain their short timeout.
+	previousTimeout := codingCommandTimeout
+	codingCommandTimeout = 10 * time.Second
+	t.Cleanup(func() { codingCommandTimeout = previousTimeout })
 	directory := t.TempDir()
 	bin := filepath.Join(directory, "bin")
 	if err := os.Mkdir(bin, 0700); err != nil {
@@ -35,6 +41,13 @@ func TestCodingInfoUsesEnabledLocalTools(t *testing.T) {
 	visible["runtimes.java"] = false
 	first := CodingInfo(visible, directory)
 	if first.Go != "1.25.1" || first.Node != "22.5.0" || first.Python != "3.13.2" || first.Java != "" || first.Docker != "desktop-linux" || first.Kubernetes != "dev-cluster" {
+		codingCommands.Lock()
+		for key, sample := range codingCommands.values {
+			if strings.HasPrefix(key, directory+"\x00") && sample.err != nil {
+				t.Logf("probe %q: %v", strings.TrimPrefix(key, directory+"\x00"), sample.err)
+			}
+		}
+		codingCommands.Unlock()
 		t.Fatalf("coding tools = %+v", first)
 	}
 	CodingInfo(visible, directory)

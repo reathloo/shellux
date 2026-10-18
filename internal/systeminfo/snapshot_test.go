@@ -57,3 +57,30 @@ func TestSnapshotInfo(t *testing.T) {
 		t.Fatalf("SnapshotInfo() = %+v, want directory and time", snapshot)
 	}
 }
+
+func BenchmarkSnapshotHiddenMetrics(b *testing.B) {
+	visible := config.Default().Visible
+	for key := range visible {
+		visible[key] = false
+	}
+	b.ResetTimer()
+	for b.Loop() {
+		if _, err := SnapshotInfoWithDisplay(visible); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+func TestHiddenBaselineMetricsAreNotCollected(t *testing.T) {
+	visible := config.Default().Visible
+	for key := range visible {
+		visible[key] = false
+	}
+	snapshot, err := SnapshotInfoWithDisplay(visible)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if snapshot.CPU != (CPU{}) || snapshot.Memory != (Memory{}) || snapshot.Network != (Network{}) || snapshot.Uptime != (Uptime{}) {
+		t.Fatal("hidden CPU, memory, network or uptime was collected")
+	}
+}

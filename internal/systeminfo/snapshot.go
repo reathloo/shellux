@@ -40,13 +40,21 @@ func SnapshotInfo() (Snapshot, error) {
 // Optional details are collected only when the corresponding entry and
 // component are enabled, so hidden integrations do not run commands or probes.
 func SnapshotInfoWithDisplay(visible map[string]bool) (Snapshot, error) {
-	cpu, err := CPUInfo()
-	if err != nil {
-		return Snapshot{}, err
+	var cpu CPU
+	if config.EntryShown(visible, "cpu") || config.EntryShown(visible, "cores") {
+		var err error
+		cpu, err = CPUInfo()
+		if err != nil {
+			return Snapshot{}, err
+		}
 	}
-	memory, err := MemoryInfo()
-	if err != nil {
-		return Snapshot{}, err
+	var memory Memory
+	if config.EntryShown(visible, "ram") {
+		var err error
+		memory, err = MemoryInfo()
+		if err != nil {
+			return Snapshot{}, err
+		}
 	}
 	directory, err := DirectoryInfo()
 	if err != nil {
@@ -64,8 +72,14 @@ func SnapshotInfoWithDisplay(visible map[string]bool) (Snapshot, error) {
 	if config.EntryShown(visible, "spotify") || config.EntryShown(visible, "progress") {
 		playback, _ = PlaybackInfo()
 	}
-	uptime, _ := UptimeInfo()
-	network := NetworkInfo()
+	var uptime Uptime
+	if config.EntryShown(visible, "uptime") {
+		uptime, _ = UptimeInfo()
+	}
+	var network Network
+	if config.EntryShown(visible, "network-status") || config.EntryShown(visible, "network-traffic") || config.EntryShown(visible, "ip") || config.EntryShown(visible, "packet-loss") {
+		network = NetworkInfo()
+	}
 	var volume Volume
 	if config.EntryShown(visible, "volume") {
 		volume, _ = VolumeInfo()
