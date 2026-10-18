@@ -232,6 +232,9 @@ if ! declare -F shellux_prompt >/dev/null 2>&1 || (( ${shellux_integration_versi
     local pending_command="${1:-${BASH_COMMAND:-}}"
     # Bash runs DEBUG before PROMPT_COMMAND as well as user commands.
     [[ "$pending_command" == shellux_prompt* || "$pending_command" == shellux_handle_resize* ]] && return 0
+    # With functrace enabled, DEBUG also fires for commands inside the
+    # resize trap. Those commands must not stop the live renderer.
+    [[ " ${FUNCNAME[*]} " == *" shellux_handle_resize "* ]] && return 0
     (( shellux_command_paused )) && return 0
     if [[ "$pending_command" != shellux* && "$pending_command" != shx* && -z "$shellux_command_started" ]]; then
       shellux_command_started=$SECONDS
@@ -293,6 +296,7 @@ if ! declare -F shellux_prompt >/dev/null 2>&1 || (( ${shellux_integration_versi
       kill -WINCH "$shellux_watch_pid" 2>/dev/null || true
     else
       shellux_render_header=1
+      shellux_prompt
     fi
   }
   if [[ -z "$(trap -p WINCH)" ]]; then
