@@ -232,6 +232,11 @@ if ! declare -F shellux_prompt >/dev/null 2>&1 || (( ${shellux_integration_versi
   fi
   shellux_before_command() {
     local pending_command="${1:-${BASH_COMMAND:-}}"
+    if [[ -n "${SHELLUX_HOOK_DEBUG_FILE:-}" ]]; then
+      printf 'HOOK command=%q functions=%q watch=%q output=%q paused=%q prompt=%q resize=%q\n' \
+        "$pending_command" "${FUNCNAME[*]}" "$shellux_watch_pid" "$shellux_output_mode" \
+        "$shellux_command_paused" "$shellux_in_prompt" "$shellux_in_resize" >> "$SHELLUX_HOOK_DEBUG_FILE"
+    fi
     # Bash runs DEBUG before PROMPT_COMMAND as well as user commands.
     [[ "$pending_command" == shellux_previous_status=* || "$pending_command" == shellux_in_prompt=* || "$pending_command" == shellux_in_resize=* ]] && return 0
     (( shellux_in_prompt || shellux_in_resize )) && return 0
