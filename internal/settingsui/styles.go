@@ -11,7 +11,7 @@ import (
 )
 
 // uiStyles follows the draft so a style/theme selection is immediately visible.
-// Terminal backgrounds and the saved configuration still change only on save.
+// Preview colors change in the terminal; the configuration changes only on save.
 type uiStyles struct {
 	accent, secondary, muted, focused, normal lipgloss.Style
 	border, cursor                            color.Color

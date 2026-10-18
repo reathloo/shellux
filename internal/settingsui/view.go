@@ -7,6 +7,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
+	"github.com/reathloo/shellux/internal/animation"
 	"github.com/reathloo/shellux/internal/config"
 	"github.com/reathloo/shellux/internal/locale"
 )
@@ -55,6 +56,9 @@ func (m *model) View() tea.View {
 		block = wrapped(text, max(1, min(60, width-2)), min(height, 7))
 	} else {
 		bw, bh := min(96, width-2), min(30, height-2)
+		if m.modal != nil && m.modal.kind == "select" && m.modal.field == "animation" {
+			bh = min(36, height-2)
+		}
 		iw := bw - 4
 		body := ""
 		if m.modal != nil {
@@ -67,7 +71,11 @@ func (m *model) View() tea.View {
 	content := lipgloss.Place(width, height, lipgloss.Center, lipgloss.Center, block)
 	v := tea.NewView(content)
 	v.AltScreen = true
+	v.MouseMode = tea.MouseModeCellMotion
 	v.WindowTitle = "Shellux"
+	if m.previewBackground != "default" {
+		v.BackgroundColor = lipgloss.Color(m.previewBackground)
+	}
 	return v
 }
 
@@ -177,6 +185,9 @@ func (m *model) mainView(width, height int, styles uiStyles) string {
 		description = m.menuHelp(selectedRow.entry.Key, part)
 	}
 	status := m.tr("Changes are applied only when you save.")
+	if m.section == appearanceSection {
+		status = m.tr("Preview is immediate; changes are saved only when you save.")
+	}
 	if m.section == doctorSection {
 		status = m.tr("Doctor repairs run immediately after confirmation.")
 	}
@@ -294,21 +305,7 @@ func (m *model) switchRow(r row, selectedRow, focus bool, width int, styles uiSt
 	}
 	// Scroll controls horizontally in narrow windows, keeping the focused one
 	// completely visible. Its semantic name remains in the help area.
-	selected := 0
-	if focus && m.part > 0 {
-		selected = min(m.part-1, len(keys)-1)
-	}
-	start, end := selected, selected+1
-	available := width - lipgloss.Width(text) - 2
-	used := lipgloss.Width(labels[selected]) + 5
-	for start > 0 && used+lipgloss.Width(labels[start-1])+5 <= available {
-		start--
-		used += lipgloss.Width(labels[start]) + 5
-	}
-	for end < len(keys) && used+lipgloss.Width(labels[end])+5 <= available {
-		used += lipgloss.Width(labels[end]) + 5
-		end++
-	}
+	start, end := m.switchWindow(labels, width, lipgloss.Width(text), focus)
 	if start > 0 {
 		text += "‹"
 	} else {
@@ -332,6 +329,25 @@ func (m *model) switchRow(r row, selectedRow, focus bool, width int, styles uiSt
 		text += "›"
 	}
 	return text
+}
+
+func (m *model) switchWindow(labels []string, width, labelWidth int, focus bool) (int, int) {
+	selected := 0
+	if focus && m.part > 0 {
+		selected = min(m.part-1, len(labels)-1)
+	}
+	start, end := selected, selected+1
+	available := width - labelWidth - 2
+	used := lipgloss.Width(labels[selected]) + 5
+	for start > 0 && used+lipgloss.Width(labels[start-1])+5 <= available {
+		start--
+		used += lipgloss.Width(labels[start]) + 5
+	}
+	for end < len(labels) && used+lipgloss.Width(labels[end])+5 <= available {
+		used += lipgloss.Width(labels[end]) + 5
+		end++
+	}
+	return start, end
 }
 
 func (m *model) entryPreview(entry string) string {
@@ -578,19 +594,41 @@ func (m *model) dialogView(width, height int, styles uiStyles) string {
 		}
 	case "select":
 		start, end := window(len(d.choices), d.selected, available)
-		for i := start; i < end; i++ {
-			option := d.choices[i]
-			text := "  " + m.tr(option.label)
-			if option.color != "" && option.color != "default" {
-				text += " " + lipgloss.NewStyle().Foreground(lipgloss.Color(option.color)).Render("██")
-			}
-			if i == d.selected {
-				text = "› " + strings.TrimPrefix(text, "  ")
-				text = focused.Render(line(text, width))
-			}
-			lines = append(lines, line(text, width))
+		listWidth := width
+		previewWidth := 0
+		if d.field == "animation" && width >= 64 {
+			listWidth = min(30, width-34)
+			previewWidth = width - listWidth - 2
 		}
-		if start > 0 || end < len(d.choices) {
+		preview := m.animationPreviewLines(previewWidth, available)
+		count := end - start
+		if previewWidth > 0 {
+			count = available
+		}
+		for offset := 0; offset < count; offset++ {
+			text := ""
+			if i := start + offset; i < end {
+				option := d.choices[i]
+				mark := "  "
+				if (d.field == "animation" || d.field == "style" || d.field == "background") && i == d.applied {
+					mark = "✓ "
+				}
+				text = "  " + mark + m.tr(option.label)
+				if option.color != "" && option.color != "default" {
+					text += " " + lipgloss.NewStyle().Foreground(lipgloss.Color(option.color)).Render("██")
+				}
+				if i == d.selected {
+					text = "› " + strings.TrimPrefix(text, "  ")
+					text = focused.Render(line(text, listWidth))
+				}
+			}
+			text = line(text, listWidth)
+			if previewWidth > 0 {
+				text += "  " + line(preview[offset], previewWidth)
+			}
+			lines = append(lines, text)
+		}
+		if previewWidth == 0 && (start > 0 || end < len(d.choices)) {
 			lines = append(lines, muted.Render(line(fmt.Sprintf(m.tr("%d–%d / %d · ↑/↓ to scroll"), start+1, end, len(d.choices)), width)))
 		}
 	}
@@ -601,10 +639,33 @@ func (m *model) dialogView(width, height int, styles uiStyles) string {
 	help := m.tr("Enter: apply · Esc: back · Ctrl+C: discard")
 	if d.kind == "select" {
 		help = m.tr("↑/↓: select · Enter: apply · Esc: back")
+		if d.field == "animation" || d.field == "style" || d.field == "background" {
+			help = m.tr("↑/↓: select · Enter: preview · Ctrl+S: save · Esc: back")
+		}
 	}
 	if d.kind == "confirm" {
 		help = m.tr("←/→ or Tab: select · Enter: confirm · Esc: back")
 	}
 	lines = append(lines, muted.Render(line(help, width)), muted.Render(line(m.tr("The file stays unchanged until you save."), width)))
 	return strings.Join(lines, "\n")
+}
+
+func (m *model) animationPreviewLines(width, height int) []string {
+	if width <= 0 || height <= 0 || m.modal == nil || m.modal.field != "animation" {
+		return nil
+	}
+	result := make([]string, height)
+	if m.previewAnimation == nil {
+		result[0] = m.tr("Preview available after download.")
+		return result
+	}
+	frame := strings.Split(animation.Frame(m.previewAnimation, m.previewFrame), "\n")
+	if len(frame) > height {
+		frame = frame[(len(frame)-height)/2:]
+	}
+	top := max(0, (height-len(frame))/2)
+	for i := 0; i < len(frame) && top+i < height; i++ {
+		result[top+i] = ansi.Truncate(frame[i], width, "")
+	}
+	return result
 }

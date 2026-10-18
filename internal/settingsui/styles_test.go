@@ -68,6 +68,7 @@ func TestStyleAndThemeSelectionRecolorsWithoutSaving(t *testing.T) {
 	if !sameColor(m.styles().border, neon.MutedColor) || m.View().Content == before {
 		t.Fatal("style did not change immediately")
 	}
+	press(m, "esc")
 	m.section = themesSection
 	chooseRow(t, m, "theme", "orangedragon")
 	press(m, "enter")

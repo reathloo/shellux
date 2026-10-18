@@ -11,7 +11,7 @@ System stats, music, and your own look right in the terminal, with your familiar
 - **Flexible display:** Toggle individual items and details such as bars, percentages, and time zones.
 - **Your own look:** Animated themes with matching styles and backgrounds. Mix and match or save your own theme.
 - **Spotify:** Current track, playback progress and an interactive control panel on macOS.
-- **Visual settings:** Customize everything with your keyboard inside the terminal.
+- **Visual settings:** Customize everything with keyboard, mouse, or touchpad inside the terminal.
 
 ## Installation
 
@@ -45,6 +45,12 @@ shellux settings
 Explore **Menu items**, **Menu layouts**, **Themes**, **Appearance**, **General**,
 and **Doctor** to choose what appears, save menu presets, select themes, set custom
 colors, and change the refresh interval.
+Click sections, entries, detail switches, and Save or Cancel directly. Scroll long
+lists with the mouse wheel or touchpad; keyboard controls remain available.
+In **Appearance**, press `Enter` to preview an animation, style, or background
+without leaving its selection list. Keep browsing, then press `Ctrl+S` to save;
+canceling Settings restores the previous terminal background. Animation previews
+need the theme package installed locally.
 **Menu layouts** shows saved layouts and preset layouts in two columns. The
 selection above them switches between automatic detection and manual choice.
 **Coding**, **Minimal**, **SSH / Remote**, **Presentation**, **Focus** and **Snapshot** are working presets.

@@ -109,6 +109,7 @@ def check_shell(shell):
             drain(0.3)
             assert renderers() == 0, (shell, "renderer running during settings")
             assert b"Settings" in raw[start:], (shell, "UI did not render")
+            assert b"\x1b[?1002h" in raw[start:], (shell, "mouse reporting not enabled")
             return start, before
 
         def close_ui(keys, start, before, count):
@@ -130,6 +131,9 @@ def check_shell(shell):
             command("shellux reload")
             # Open from a visible header, cancel without reload or config write.
             start, before = open_ui()
+            # SGR mouse click on Appearance in the 140x40 settings panel.
+            os.write(fd, b"\x1b[<0;26;12M")
+            wait_for(b"Preview is immediate", start)
             output = close_ui(b"\x1b", len(raw), before, 0)
             assert b"\x1b[3J" not in output, "cancellation cleared scrollback"
             assert not config_path.exists()
@@ -198,6 +202,8 @@ def check_shell(shell):
             drain(0.1)
             os.write(fd, b"\x1b[A" * 50 + b"\x1b[B" * orb_index + b"\r")  # start at top, then orb
             drain(0.1)
+            os.write(fd, b"\x1b")  # leave animation preview list
+            drain(0.3)
             style_start = len(raw)
             os.write(fd, b"\x1b[B\r")  # style selector
             # Bubble Tea may redraw only the changed portion of the title, so
@@ -209,14 +215,33 @@ def check_shell(shell):
             wait_for(b"38;5;201", style_start)
             assert b"38;5;201" in raw[style_start:], ("UI did not immediately adopt neon accents", bytes(raw[style_start:])[-2000:])
             assert b"38;5;45" in raw[style_start:], "UI did not immediately adopt neon border colors"
+            os.write(fd, b"\x1b")  # leave style preview list
+            drain(0.3)
             os.write(fd, b"\x1b[B\r" + b"\x1b[B" * 100 + b"\r")  # custom background at end of growing theme list
             drain(0.1)
+            background_start = len(raw)
             os.write(fd, b"\x01\x0b#123456\r")
-            drain(0.1)
+            wait_for(b"\x1b]11;#123456", background_start)
             output = close_ui(b"\x13", len(raw), before, 1)
             appearance = json.loads(config_path.read_bytes())
             assert (appearance["animation"], appearance["style"], appearance["background"]) == ("orb", "neon", "#123456")
             assert b"\x1b]11;" in output, "saved background was not applied"
+            # A different background is visible in the open list, then Esc
+            # discards the draft and restores the previously saved color.
+            start, before = open_ui()
+            os.write(fd, b"\x1b[B" * 3 + b"\r" + b"\x1b[B" * 2 + b"\r")
+            wait_for(b"Profile color", start)
+            preview_start = len(raw)
+            os.write(fd, b"\x1b[A" * 100 + b"\x1b[B" * 8 + b"\r")  # red
+            wait_for(b"\x1b]11;#ff0000", preview_start)
+            os.write(fd, b"\x1b")  # leave background list
+            drain(0.3)
+            os.write(fd, b"\x1b")  # discard the unsaved preview
+            wait_for(b"Discard unsaved changes?", preview_start)
+            restored = close_ui(b"\x1b[C\r", len(raw), before, 0)
+            exit_index = restored.index(b"\x1b[?1049l")
+            assert b"\x1b]11;#123456" in restored[exit_index:], "cancel did not restore the saved background"
+            assert json.loads(config_path.read_bytes())["background"] == "#123456"
             start, before = open_ui()
             theme_list = subprocess.check_output([BINARY, "themes"], env=test_env, text=True)
             theme_count = len(re.findall(r"^\s+\S+\s+\((?:default|built-in|custom|download|installed)\)", theme_list, re.MULTILINE))

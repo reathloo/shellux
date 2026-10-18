@@ -517,6 +517,7 @@ func TestSelectionInputAndSaveFailure(t *testing.T) {
 	if m.draft.Style != "neon" {
 		t.Fatal("style selection")
 	}
+	press(m, "esc")
 	chooseRow(t, m, "background", "")
 	press(m, "enter")
 	m.modal.selected = len(m.modal.choices) - 1
@@ -561,6 +562,71 @@ func TestSelectionInputAndSaveFailure(t *testing.T) {
 	press(m, "ctrl+s")
 	if !m.done || m.result != Saved {
 		t.Fatal("save")
+	}
+}
+
+func TestAppearancePreviewKeepsSelectorOpenUntilSave(t *testing.T) {
+	var saved config.Config
+	m := newModel(config.Default(), func(c config.Config) error { saved = c; return nil })
+	m.section = appearanceSection
+	chooseRow(t, m, "style", "")
+	press(m, "enter")
+	for i, option := range m.modal.choices {
+		if option.value == "neon" {
+			m.modal.selected = i
+			break
+		}
+	}
+	press(m, "enter")
+	if m.modal == nil || m.modal.field != "style" || m.draft.Style != "neon" || m.original.Style == "neon" {
+		t.Fatal("style preview closed the selector or changed saved settings")
+	}
+	press(m, "esc")
+	chooseRow(t, m, "background", "")
+	press(m, "enter")
+	for _, color := range []string{"#ff0000", "#0000ff"} {
+		for i, option := range m.modal.choices {
+			if option.value == color {
+				m.modal.selected = i
+				break
+			}
+		}
+		press(m, "enter")
+		if m.modal == nil || m.modal.field != "background" || m.previewBackground != color || m.draft.Background != color || !sameColor(m.View().BackgroundColor, lipgloss.Color(color)) {
+			t.Fatalf("background %s was not previewed while browsing", color)
+		}
+	}
+	if m.original.Background == m.draft.Background {
+		t.Fatal("preview changed the saved baseline")
+	}
+	press(m, "ctrl+s")
+	if !m.done || m.result != Saved || saved.Background != "#0000ff" || saved.Style != "neon" {
+		t.Fatal("saving inside the selector did not persist the preview")
+	}
+}
+
+func TestAnimationPreviewRunsInsideSelector(t *testing.T) {
+	m := newModel(config.Default(), func(config.Config) error { return nil })
+	m.width, m.height = 96, 40
+	m.section = appearanceSection
+	chooseRow(t, m, "animation", "")
+	press(m, "enter")
+	if m.modal == nil || m.modal.field != "animation" || m.previewAnimation == nil {
+		t.Fatal("animation selector has no preview")
+	}
+	preview := m.animationPreviewLines(54, 27)
+	if len(preview) != 27 || strings.TrimSpace(ansi.Strip(strings.Join(preview, ""))) == "" {
+		t.Fatal("animation preview is empty")
+	}
+	checkBounds(t, m, [2]int{96, 40})
+	_, cmd := m.Update(animationPreviewTick{generation: m.previewGeneration})
+	if m.previewFrame != 1 || cmd == nil {
+		t.Fatal("animation preview did not advance")
+	}
+	press(m, "esc")
+	_, cmd = m.Update(animationPreviewTick{generation: m.previewGeneration})
+	if cmd != nil {
+		t.Fatal("animation preview kept running after closing the selector")
 	}
 }
 

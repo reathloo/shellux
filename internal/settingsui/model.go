@@ -15,8 +15,10 @@ import (
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/term"
+	"github.com/reathloo/shellux/internal/animation"
 	"github.com/reathloo/shellux/internal/config"
 	"github.com/reathloo/shellux/internal/doctor"
+	"github.com/reathloo/shellux/internal/terminal"
 	"github.com/reathloo/shellux/internal/themepack"
 )
 
@@ -47,6 +49,13 @@ func Run() (int, config.Config, error) {
 		return Failed, config.Config{}, err
 	}
 	m := newModel(session.Config, session.Save)
+	restoreBackground := effectiveBackground(session.Config)
+	m.previewBackground = restoreBackground
+	defer func() {
+		// Bubble Tea resets its preview color on exit. Restore the original
+		// color on cancel, or keep the saved color when Settings closes.
+		fmt.Fprint(os.Stdout, terminal.Background(restoreBackground))
+	}()
 	m.ensure = func(ctx context.Context, c config.Config) error { return c.EnsurePackages(ctx) }
 	m.refresh = true
 	defer func() {
@@ -68,7 +77,19 @@ func Run() (int, config.Config, error) {
 		return Failed, config.Config{}, err
 	}
 	result := final.(*model)
+	if result.result == Saved {
+		restoreBackground = effectiveBackground(result.draft)
+	}
 	return result.result, result.draft, nil
+}
+
+func effectiveBackground(c config.Config) string {
+	if directory, err := os.Getwd(); err == nil {
+		if width, height, err := term.GetSize(os.Stdout.Fd()); err == nil {
+			return c.EffectiveProfile(directory, width, height).Background
+		}
+	}
+	return c.Background
 }
 
 type row struct {
@@ -110,11 +131,18 @@ type dialog struct {
 	kind, title, field, action, value string
 	choices                           []choice
 	selected                          int
+	applied                           int
 	input                             textinput.Model
 	error                             string
 }
+type animationPreviewTick struct{ generation int }
+
 type model struct {
 	original, draft         config.Config
+	previewBackground       string
+	previewAnimation        animation.Animation
+	previewFrame            int
+	previewGeneration       int
 	save                    func(config.Config) error
 	width, height           int
 	section, focus, part    int // focus: navigation, content, save, cancel
@@ -142,7 +170,7 @@ type model struct {
 }
 
 func newModel(c config.Config, save func(config.Config) error) *model {
-	m := &model{original: c.Clone(), draft: c.Clone(), save: save, width: 96, height: 30, result: Cancelled, checkInstalled: themepack.IsInstalled, doctorScan: doctor.Scan, doctorFix: doctor.Repair}
+	m := &model{original: c.Clone(), draft: c.Clone(), previewBackground: c.Background, save: save, width: 96, height: 30, result: Cancelled, checkInstalled: themepack.IsInstalled, doctorScan: doctor.Scan, doctorFix: doctor.Repair}
 	m.cursors[0] = 1 // first row is the SYSTEM heading
 	return m
 }
@@ -202,6 +230,12 @@ func (m *model) cancel() tea.Cmd {
 
 func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case animationPreviewTick:
+		if msg.generation != m.previewGeneration || m.modal == nil || m.modal.field != "animation" || m.previewAnimation == nil {
+			return m, nil
+		}
+		m.previewFrame++
+		return m, m.nextAnimationPreviewTick()
 	case doctorResult:
 		if msg.id != m.doctorID {
 			return m, nil
@@ -256,6 +290,8 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.modal.input.SetWidth(max(8, min(52, m.width-12)))
 		}
 		return m, nil
+	case tea.MouseClickMsg, tea.MouseWheelMsg:
+		return m, m.updateMouse(msg)
 	case tea.KeyPressMsg:
 		key := msg.String()
 		if m.doctorBusy {
@@ -789,7 +825,10 @@ func (m *model) activate() tea.Cmd {
 				break
 			}
 		}
-		m.modal = &dialog{kind: "select", title: "Select " + strings.ToLower(r.label), field: r.action, choices: options, selected: selected}
+		m.modal = &dialog{kind: "select", title: "Select " + strings.ToLower(r.label), field: r.action, choices: options, selected: selected, applied: selected}
+		if r.action == "animation" {
+			return m.startAnimationPreview(current)
+		}
 	}
 	return nil
 }
@@ -833,6 +872,8 @@ func (m *model) updateDialog(msg tea.Msg) tea.Cmd {
 			d.selected = max(0, d.selected-1)
 		case "down":
 			d.selected = min(len(d.choices)-1, d.selected+1)
+		case "ctrl+s":
+			return m.saveDraft()
 		case "enter", "space":
 			value := d.choices[d.selected].value
 			if d.field == "focus-duration" {
@@ -853,7 +894,18 @@ func (m *model) updateDialog(msg tea.Msg) tea.Cmd {
 			if err := m.draft.ChangeAppearance(d.field, value); err != nil {
 				d.error = friendly(err)
 			} else {
-				m.modal = nil
+				d.error = ""
+				if d.field == "background" {
+					m.previewBackground = m.draft.Background
+				}
+				if d.field == "animation" || d.field == "style" || d.field == "background" {
+					d.applied = d.selected
+				} else {
+					m.modal = nil
+				}
+				if d.field == "animation" {
+					return m.startAnimationPreview(value)
+				}
 			}
 		}
 	case "confirm":
@@ -908,6 +960,26 @@ func (m *model) updateDialog(msg tea.Msg) tea.Cmd {
 	}
 	return nil
 }
+
+func (m *model) startAnimationPreview(name string) tea.Cmd {
+	m.previewGeneration++
+	m.previewFrame = 0
+	m.previewAnimation = nil
+	if name == "shelluxdefault" {
+		m.previewAnimation = animation.ShelluxDefault{}
+	} else if loaded, err := themepack.LoadName(name); err == nil {
+		m.previewAnimation = loaded
+	}
+	return m.nextAnimationPreviewTick()
+}
+
+func (m *model) nextAnimationPreviewTick() tea.Cmd {
+	if m.previewAnimation == nil {
+		return nil
+	}
+	generation := m.previewGeneration
+	return tea.Tick(m.previewAnimation.Interval(), func(time.Time) tea.Msg { return animationPreviewTick{generation: generation} })
+}
 func (m *model) confirmInput() bool {
 	d := m.modal
 	value := strings.TrimSpace(d.input.Value())
@@ -948,6 +1020,9 @@ func (m *model) confirmInput() bool {
 	} else if err := m.draft.ChangeAppearance(d.field, value); err != nil {
 		d.error = friendly(err)
 		return false
+	}
+	if d.field == "background" {
+		m.previewBackground = m.draft.Background
 	}
 	m.modal = nil
 	return true
