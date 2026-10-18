@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   release:
-    name: Build release draft
+    name: Build and publish release
     runs-on: macos-latest
     steps:
       - name: Checkout
@@ -33,8 +33,13 @@ jobs:
           go vet ./...
           sh scripts/install_test.sh
           sh -n scripts/install.sh scripts/install-release.sh
+          sh shell/shellux_test.sh
+          go build -o "$RUNNER_TEMP/shellux" ./cmd/shellux
+          python3 shell/settings_pty_test.py "$RUNNER_TEMP/shellux"
+          python3 shell/profile_pty_test.py "$RUNNER_TEMP/shellux"
+          python3 shell/mouse_pty_test.py
 
-      - name: Create draft release
+      - name: Publish release
         uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7
         with:
           distribution: goreleaser

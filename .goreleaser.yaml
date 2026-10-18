@@ -53,7 +53,7 @@ changelog:
       - '^chore:'
 
 release:
-  draft: true
+  draft: false
 
 snapshot:
   version_template: '{{ incpatch .Version }}-next'
