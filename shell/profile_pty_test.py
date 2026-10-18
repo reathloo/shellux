@@ -33,7 +33,8 @@ def check(shell):
         pid, fd = pty.fork()
         if pid == 0:
             os.chdir(root)
-            os.environ.update(XDG_CONFIG_HOME=temporary, SHELLUX_BIN=BINARY, TERM="xterm-256color")
+            os.environ.update(XDG_CONFIG_HOME=temporary, SHELLUX_BIN=BINARY, TERM="xterm-256color",
+                              SHELLUX_HOOK_DEBUG_FILE=str(root / "hook.log"))
             os.environ.pop("NO_COLOR", None)
             argv = ["zsh", "-f"] if shell == "zsh" else ["bash", "--noprofile", "--norc", "-i"]
             os.execvp(shell, argv)
@@ -73,7 +74,9 @@ def check(shell):
                 if expected in raw[start:]:
                     drain(0.35)
                     return bytes(raw[start:])
-            raise AssertionError((shell, "resize", columns, rows, expected, bytes(raw[start:])[-1500:]))
+            hook_log = root / "hook.log"
+            hooks = hook_log.read_text(errors="replace").splitlines()[-18:] if hook_log.exists() else []
+            raise AssertionError((shell, "resize", columns, rows, expected, bytes(raw[start:])[-1500:], hooks))
 
         try:
             fcntl.ioctl(fd, termios.TIOCSWINSZ, struct.pack("HHHH", 40, 140, 0, 0))
