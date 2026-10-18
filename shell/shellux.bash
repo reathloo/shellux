@@ -239,6 +239,8 @@ if ! declare -F shellux_prompt >/dev/null 2>&1 || (( ${shellux_integration_versi
     # Bash may replay the most recent command before handling WINCH. Sourcing
     # Shellux itself is integration setup, not terminal output to preserve.
     [[ "$pending_command" == source\ *shellux.bash* || "$pending_command" == .\ *shellux.bash* ]] && return 0
+    # Reload already stops and restarts the renderer itself.
+    [[ "$pending_command" == shellux\ reload* || "$pending_command" == shx* ]] && return 0
     # On WINCH, Bash can repeat DEBUG for the last completed command before
     # invoking the signal trap. A new command has a new history index.
     [[ -n "$shellux_last_command" && "$pending_command" == "$shellux_last_command" && \
