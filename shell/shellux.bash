@@ -12,6 +12,7 @@ if ! declare -F shellux_prompt >/dev/null 2>&1 || (( ${shellux_integration_versi
   : "${shellux_preserve_content:=0}"
   : "${shellux_output_mode:=0}"
   : "${shellux_command_paused:=0}"
+  : "${shellux_in_prompt:=0}"
   : "${shellux_watch_pid:=}"
   shellux_command_started=
   shellux_last_command=
@@ -239,7 +240,8 @@ if ! declare -F shellux_prompt >/dev/null 2>&1 || (( ${shellux_integration_versi
         "$shellux_watch_pid" "$shellux_output_mode" "$shellux_command_paused" >> "$SHELLUX_HOOK_DEBUG_FILE"
     fi
     # Bash runs DEBUG before PROMPT_COMMAND as well as user commands.
-    [[ "$pending_command" == shellux_previous_status=* ]] && return 0
+    [[ "$pending_command" == shellux_previous_status=* || "$pending_command" == shellux_in_prompt=* ]] && return 0
+    (( shellux_in_prompt )) && return 0
     [[ "$pending_command" == shellux_prompt* || "$pending_command" == shellux_handle_resize* ]] && return 0
     # Bash may replay the most recent command before handling WINCH. Sourcing
     # Shellux itself is integration setup, not terminal output to preserve.
@@ -327,7 +329,7 @@ if ! declare -F shellux_prompt >/dev/null 2>&1 || (( ${shellux_integration_versi
   shellux_debug_ready=0
   shellux_previous_debug_trap=
   shellux_debug_trap_command='trap '\''shellux_debug_dispatch "$_" "$BASH_COMMAND"'\'' DEBUG'
-  shellux_prompt_hook='shellux_previous_status=$?; if (( ! shellux_debug_ready )); then shellux_debug_trap_parts=(); eval "shellux_debug_trap_parts=($(trap -p DEBUG))"; shellux_prepare_debug_hook "${shellux_debug_trap_parts[2]:-}"; eval "$shellux_debug_trap_command"; fi; shellux_prompt "$shellux_previous_status"'
+  shellux_prompt_hook='shellux_previous_status=$?; shellux_in_prompt=1; if (( ! shellux_debug_ready )); then shellux_debug_trap_parts=(); eval "shellux_debug_trap_parts=($(trap -p DEBUG))"; shellux_prepare_debug_hook "${shellux_debug_trap_parts[2]:-}"; eval "$shellux_debug_trap_command"; fi; shellux_prompt "$shellux_previous_status"; shellux_in_prompt=0'
   if [[ "$(declare -p PROMPT_COMMAND 2>/dev/null)" == "declare -a "* ]]; then
     shellux_prompt_registered=0
     for shellux_prompt_entry in "${PROMPT_COMMAND[@]}"; do
