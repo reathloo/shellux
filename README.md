@@ -1,31 +1,45 @@
 # Shellux
 
-An animated system dashboard for **Zsh and Bash on macOS and Linux**.
-System stats, music, and your own look right in the terminal, with your familiar prompt intact.
+An animated system dashboard for **Zsh and Bash on macOS and Linux**. Shellux
+keeps system stats, project context, music, and your own visual style above the
+prompt you already use.
 
 ![Shellux dashboard with a gold wordmark, system stats, and Spotify playback](docs/images/shellux-header.png)
 
-## Features
+[Install](#installation) · [Customize](#customize-shellux) ·
+[Profiles](#profiles) · [Commands](#everyday-commands) ·
+[Development](#development)
 
-- **System overview:** CPU, RAM, storage, battery, network, and more.
-- **Flexible display:** Toggle individual items and details such as bars, percentages, and time zones.
-- **Your own look:** Animated themes with matching styles and backgrounds. Mix and match or save your own theme.
-- **Spotify:** Current track, playback progress and an interactive control panel on macOS.
-- **Visual settings:** Customize everything with keyboard, mouse, or touchpad inside the terminal.
+## Why Shellux?
+
+Shellux turns unused terminal space into a live, configurable header without
+replacing your prompt or shell workflow.
+
+| | What you get |
+| --- | --- |
+| **System at a glance** | CPU, memory, storage, battery, network, load, swap, and other optional local metrics. |
+| **Context when it matters** | Git, runtime, container, SSH, and last-command details can appear only in the relevant profile. |
+| **A dashboard that adapts** | Automatic layouts for coding, small terminals, and remote sessions, plus manual focus and presentation modes. |
+| **Your own look** | Animated themes, menu styles, backgrounds, custom colors, favorites, and saved layouts. |
+| **Terminal-native controls** | Configure Shellux with keyboard, mouse, or touchpad; use interactive Spotify controls on macOS. |
 
 ## Installation
 
-Install the latest release with one command:
+Install the latest release:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/reathloo/shellux/main/scripts/install-release.sh | sh
 ```
 
-The installer detects macOS/Linux and your processor architecture, verifies the
-downloaded archive with SHA-256, installs Shellux under `~/.local`, and adds it
-to Zsh or Bash. Open a new terminal tab afterward.
+The installer detects your operating system and processor architecture,
+verifies the downloaded archive with SHA-256, installs Shellux under
+`~/.local`, and adds the integration to Zsh or Bash. Open a new terminal tab
+when it finishes.
 
-For a manual installation, download the archive and `checksums.txt` from
+<details>
+<summary><strong>Manual installation</strong></summary>
+
+Download the archive and `checksums.txt` from
 [GitHub Releases](https://github.com/reathloo/shellux/releases), verify the
 archive, extract it, and run:
 
@@ -33,168 +47,242 @@ archive, extract it, and run:
 ./install.sh
 ```
 
-This manual path prints the lines to add to your shell configuration without
-changing it automatically.
+The manual installer prints the shell configuration lines instead of changing
+your configuration automatically.
 
-## Customize
+</details>
+
+## Quick start
+
+Open the visual settings menu:
 
 ```sh
 shellux settings
 ```
 
-Explore **Menu items**, **Menu layouts**, **Themes**, **Appearance**, **General**,
-and **Doctor** to choose what appears, save menu presets, select themes, set custom
-colors, and change the refresh interval.
-Click sections, entries, detail switches, and Save or Cancel directly. Scroll long
-lists with the mouse wheel or touchpad; keyboard controls remain available.
-In **Appearance**, press `Enter` to preview an animation, style, or background
-without leaving its selection list. Keep browsing, then press `Ctrl+S` to save;
-canceling Settings restores the previous terminal background. Animation previews
-need the theme package installed locally.
-**Menu layouts** shows saved layouts and preset layouts in two columns. The
-selection above them switches between automatic detection and manual choice.
-**Coding**, **Minimal**, **SSH / Remote**, **Presentation**, **Focus** and **Snapshot** are working presets.
-Manual selection works in any directory. Automatic Coding
-activates inside a Git repository or a project containing `go.mod`,
-`package.json`, `pyproject.toml`, `Cargo.toml`, `pom.xml`, or a Gradle build file.
-Changing directories into or out of a Coding project refreshes the header in
-the sourced shell. Docker and Kubernetes contexts are displayed when their
-tools are available, but do not trigger Coding. Git details appear inside Git
-repositories; installed runtimes and the last shell command appear when their
-data is available. Coding temporarily uses a compact menu with the CODING
-section first. Its selection never changes the chosen theme, animation, style
-or background. The saved menu returns when Coding is no longer active.
-Automatic Minimal takes precedence when the terminal is narrower than 110
-columns or shorter than 18 rows. It shows time, path, optional Git branch,
-CPU and memory in a compact list with a small pulsing indicator. The selected
-theme remains saved and the usual layout returns as soon as there is room.
-Automatic SSH / Remote activates in an incoming SSH shell when `SSH_CONNECTION`,
-`SSH_CLIENT` or `SSH_TTY` is set. It takes precedence over Coding, while Minimal
-still wins on a small terminal. The preset shows account and host, SSH client
-and server endpoints, TTY and terminal type, path, connection status, uptime,
-CPU and memory. Identity, SSH link and terminal each have two independent detail
-switches under **Menu items → REMOTE**. Missing SSH values show `N/A`; no server
-is contacted to fill them in. The preset preserves the selected theme
-and restores the usual layout when the SSH session ends. `SSH_AUTH_SOCK` alone
-does not count as a remote session; manually selecting Remote also works locally.
-Presentation is selected manually before screen sharing or recording. Its
-Shellux header shows only date, time, uptime, CPU and memory percentages, and
-connected/disconnected status. It hides paths, host and network names, IPs,
-Git and tool context, logged-in users, and media metadata. The selected theme
-stays unchanged. This controls the Shellux header; your shell prompt and
-existing terminal output can still contain private information.
-Snapshot is selected manually for bug diagnosis. It captures the current time,
-Shellux version, platform, shell, uptime, CPU, memory, load and connection
-status in a fixed header. Hostname, path, IP and media details are hidden by
-the preset. The values and animation stay still until `shellux reload` captures
-a new view. The selected theme stays unchanged. This is a local display, not
-an automatically shared bug report.
-Focus is selected manually in **Menu layouts**. Choose 15, 25, 30, 45 or 60
-minutes, or enter a custom duration from 1 to 240 minutes. During the session,
-CPU and memory percentages, Spotify and playback progress remain in the usual
-dashboard column. The shaded ASCII clock uses the supplied `#`, `/`, `\\`, `_`
-and `|` font in the same 51×26 canvas as other animations. Below one hour it
-shows minutes and seconds; from one hour onward it shows hours and minutes.
-The colon stays still and there are no additional labels. When the terminal is
-too narrow for both columns, the dashboard moves above the centered clock.
-The terminal background is black and the header text is white. When the timer
-expires, Shellux restores the previous layout selection and the saved theme.
-Selecting another layout ends the session early. The timer is saved with an
-absolute deadline, so reopening the terminal does not restart it.
-**Doctor** checks the installed Zsh/Bash integration, downloaded theme packages,
-owner permissions on Shellux files, and orphaned live-renderer processes. Scanning
-does not change anything or access the network. A repair is offered only when
-Shellux can identify a safe target and requires confirmation; theme repair may
-download verified packages, while permission repair never uses administrator
-privileges. Open a new terminal tab after repairing the shell integration.
-Under **Menu layouts**, save the current menu as a named layout, apply a saved
-layout or delete it. A layout includes visible items, detail switches and their
-order; it does not change the theme, colors, language or refresh interval.
-In **Menu items**, select a section, item or detail switch and press `M` to
-reorder it. In move mode, `↑/↓` moves a section or item, and `←/→` moves a detail
-switch. Press `Enter` to leave move mode, then save to apply the layout.
-You can also move a selected detail switch directly with `Shift+←/→`.
-CPU, RAM, network traffic, and battery can each show an optional eight-step
-sparkline summarizing the last minute; the existing detail switches remain independent.
-Optional rows also include disk read/write throughput, gateway-ping loss with
-sample counts, distinct locally logged-in users with names, and microphone/camera
-activity. Each has separate detail switches and starts hidden. Media activity is
-reported only when macOS exposes device status; otherwise it shows `N/A` (Linux
-currently reports `N/A`). Gateway-ping loss is not a measurement of all network
-traffic and may reflect blocked ICMP rather than an actual connection problem.
-Further optional resource rows show the 1/5/15-minute load averages, used/free
-swap, and the GPU model/core count reported by macOS. GPU utilization is not
-estimated; unavailable hardware details show `N/A`. The volume row also has
-an independent, default-off switch for remaining free space.
-The **CODING** section contains five default-off rows: Git branch/repository,
-ahead/behind counts against the locally configured upstream, Go/Node/Python/Java
-versions, Docker/Kubernetes contexts, and the last command's duration/exit code.
-Each row has independent detail switches. Git comparisons use local refs and do
-not fetch; missing tools, repositories, upstreams, or shell command data show
-`N/A`. Shellux collects these values only when their rows are enabled. Last
-command duration has whole-second resolution and requires the sourced Zsh/Bash
-integration; the header still waits for an explicit reload after normal command
-output.
-The **SESSION → Spotify** row shows the current artist and title in a 21-column
-field. Longer text scrolls left and loops back in from the right. Its optional
-**Album** detail switch shows the full album name fixed to the right of the scrolling
-text (off by default). The row expands when needed and is clipped at the terminal edge. The
-**Progress** row shows playback time and a clickable progress bar for seeking,
-followed by previous and next controls under one **Skip buttons** switch when the local Spotify desktop app is
-running. Its leading play/pause symbol is clickable too. In a sourced Zsh shell,
-click the symbols directly in the pinned dashboard while the prompt is idle.
-In sourced Zsh, hovering over a letter in **S H E L L U X** inverts
-that letter; moving away restores it. This uses terminal mouse-motion reports.
-Mouse reporting is active only while Shellux owns the prompt; hold Shift when
-selecting text in terminals that reserve ordinary dragging for mouse reports.
-Shellux disables mouse reporting before commands and full-screen apps run.
-The existing `shellux spotify` panel remains a keyboard fallback, including in
-Bash, where the system Readline cannot safely route dashboard clicks. Its
-**T** shortcut toggles playback.
-Under **General → Language**, choose **Automatic (system)**, **English**, or
-**Deutsch** for the dashboard and settings. Automatic uses the system/terminal
-locale, with English as the fallback for other languages. Commands stay unchanged.
+Use the arrow keys to navigate, `Tab` to switch sections, and `Space` or
+`Enter` to toggle or select. Press `Ctrl+S` to save or `Esc` to cancel.
+
+> [!IMPORTANT]
+> Changes take effect only after you save. Saving restarts the header and clears
+> scrollback; canceling restores the previous settings and terminal background.
 
 ![Shellux settings with navigation and individually configurable menu items](docs/images/shellux-settings.png)
 
-Use the **arrow keys** to navigate, **Tab** to switch sections, and **Space / Enter** to toggle or select.
-**Ctrl+S** saves; **Esc** cancels. More keyboard shortcuts appear in the menu.
+## Customize Shellux
 
-Changes take effect only when you **Save**, which restarts the header and clears scrollback.
-**Cancel** discards your changes. Additional themes download only when you save
-and remain available offline afterward. The default theme, general styles, and basic colors are built in.
-In **Themes**, press `F` to mark a theme as a favorite (save to keep the change).
-Press `U` on an installed catalog theme to uninstall its downloaded files after
-confirmation; this takes effect immediately. Switch away from an active theme and
-save first. When you open **Themes**, Shellux checks the catalog and automatically
-updates already installed packages to newer verified versions. The header itself
-does not access the network.
+The settings menu groups related controls instead of exposing one long list:
 
-## Everyday use
+| Section | Purpose |
+| --- | --- |
+| **Menu items** | Choose rows and their independent detail switches; reorder them with `M`. |
+| **Menu layouts** | Select automatic or manual profile handling, apply presets, and save or delete custom layouts. |
+| **Themes** | Select, preview, favorite, install, update, or uninstall theme packages. |
+| **Appearance** | Combine animations, menu styles, colors, and terminal backgrounds. |
+| **General** | Change language and refresh behavior. |
+| **Doctor** | Scan the local installation and offer confirmation-gated repairs. |
+
+Shellux supports up to **11 visible menu slots**. Empty categories disappear
+automatically. A saved layout contains row visibility, detail switches, and
+their order; it does not change your theme, colors, language, or refresh
+interval.
+
+### Reorder items
+
+In **Menu items**, select a section, row, or detail switch and press `M`:
+
+- `↑` / `↓` moves a section or row.
+- `←` / `→` moves a detail switch.
+- `Enter` leaves move mode.
+- `Shift+←` / `Shift+→` moves the selected switch directly.
+
+### Themes and appearance
+
+- Press `Enter` in **Appearance** to preview an animation, style, or background.
+- Press `F` in **Themes** to mark a theme as a favorite.
+- Press `U` to uninstall an inactive downloaded theme after confirmation.
+- Installed catalog themes are checked for verified updates when **Themes** opens.
+- Downloaded themes stay available offline; the live header itself does not
+  access the network.
+
+The default theme, general styles, and basic colors are built in. Additional
+animation previews require the corresponding theme package to be installed.
+
+## Profiles
+
+Shellux uses one global profile mode: **Automatic** or **Manual**. Manual mode
+keeps the selected profile in every directory; Automatic mode chooses a profile
+from the current terminal context.
+
+| Profile | Selection | Designed for |
+| --- | --- | --- |
+| **Standard** | Default | Your normal saved dashboard. |
+| **Coding** | Automatic or manual | Git repository, runtimes, containers, and command context. |
+| **Minimal** | Automatic or manual | Terminals narrower than 110 columns or shorter than 18 rows. |
+| **SSH / Remote** | Automatic or manual | Incoming SSH sessions and remote diagnostics. |
+| **Presentation** | Manual | Screen sharing with sensitive dashboard fields hidden. |
+| **Focus** | Manual | A 1–240 minute timer beside the normal resource dashboard. |
+| **Snapshot** | Manual | A fixed, local diagnostic view refreshed only on request. |
+
+> [!NOTE]
+> In Automatic mode, a small terminal selects **Minimal** first, an incoming SSH
+> session selects **SSH / Remote** next, and a recognized project selects
+> **Coding**. Profiles change layout and visible information, not the saved theme.
+
+<details>
+<summary><strong>Profile behavior in detail</strong></summary>
+
+### Coding
+
+Coding activates inside a Git repository or a project containing `go.mod`,
+`package.json`, `pyproject.toml`, `Cargo.toml`, `pom.xml`, or a Gradle build
+file. It can show local Git status, installed runtimes, Docker and Kubernetes
+contexts, and the last command's result. Docker and Kubernetes alone do not
+trigger the profile.
+
+### Minimal
+
+Minimal shows time, path, an optional Git branch, CPU, and memory with a compact
+pulsing indicator. The regular layout returns as soon as the terminal has
+enough room.
+
+### SSH / Remote
+
+Remote activates when `SSH_CONNECTION`, `SSH_CLIENT`, or `SSH_TTY` is set.
+`SSH_AUTH_SOCK` alone does not count. The preset can show account, host,
+endpoints, TTY, terminal type, path, connection status, uptime, CPU, and memory.
+Missing values appear as `N/A`; Shellux does not contact the server to fill
+them in.
+
+### Presentation
+
+Presentation keeps only date, time, uptime, CPU, memory, and connection status.
+It hides paths, host and network names, IP addresses, Git and tool context,
+logged-in users, and media metadata. Your prompt and existing terminal output
+may still contain private information.
+
+### Focus
+
+Choose 15, 25, 30, 45, or 60 minutes, or enter a custom duration from 1 to 240
+minutes. The timer uses an absolute deadline, survives reopening the terminal,
+and restores the previous layout when it expires. Selecting another layout ends
+the session early.
+
+### Snapshot
+
+Snapshot freezes the time, Shellux version, platform, shell, uptime, CPU,
+memory, load, and connection status. Hostname, path, IP, and media details stay
+hidden. Run `shellux reload` to capture a new local view; nothing is shared
+automatically.
+
+</details>
+
+## Dashboard components
+
+Rows and their detail switches are independently configurable. Optional rows
+start hidden, and unavailable values appear as `N/A`.
+
+<details>
+<summary><strong>System and resource metrics</strong></summary>
+
+- CPU, RAM, network traffic, and battery can show an optional eight-step
+  sparkline for roughly the last minute.
+- Optional rows include disk read/write throughput, gateway-ping loss with
+  sample counts, distinct local users, microphone/camera activity, load
+  averages, swap usage, and the GPU model or core count reported by macOS.
+- Volume can show remaining free space with an independent, default-off switch.
+- Gateway-ping loss can also mean ICMP is blocked; it is not a measurement of
+  all network traffic.
+- GPU utilization is not estimated. Media activity currently reports `N/A` on
+  Linux when the platform does not expose the required information.
+- Thermal reports a state, not a temperature in degrees Celsius. Optional macOS
+  setup with `shellux thermal enable` requires administrator privileges.
+
+</details>
+
+<details>
+<summary><strong>Coding data</strong></summary>
+
+The **CODING** section contains five default-off rows:
+
+- Git branch and repository.
+- Local ahead/behind counts for the configured upstream.
+- Go, Node, Python, and Java versions.
+- Docker and Kubernetes contexts.
+- Last command duration and exit code.
+
+Git comparisons use local refs and never fetch. Shellux probes optional tools
+only when their rows are enabled. Last-command data requires the sourced Zsh or
+Bash integration and has whole-second resolution.
+
+</details>
+
+<details>
+<summary><strong>Spotify and mouse interaction</strong></summary>
+
+On macOS, **SESSION → Spotify** shows the current artist and title in a scrolling
+21-column field. The default-off **Album** switch adds the fixed album name.
+The **Progress** row can show playback time, a seekable progress bar, play/pause,
+and previous/next controls.
+
+In sourced Zsh, click playback controls directly while the prompt is idle.
+Hovering a letter in **S H E L L U X** highlights it. Mouse reporting is active
+only while Shellux owns the prompt; hold `Shift` when selecting terminal text if
+your terminal reserves normal dragging for mouse reports.
+
+Bash Readline cannot safely route dashboard clicks, so use `shellux spotify` as
+the keyboard fallback. Its `T` shortcut toggles playback.
+
+</details>
+
+## Language
+
+Under **General → Language**, choose **Automatic (system)**, **English**, or
+**Deutsch** for the dashboard and settings. Automatic follows the system or
+terminal locale and falls back to English. Command names remain unchanged.
+
+## Doctor
+
+`shellux doctor` checks the installed Zsh/Bash integration, downloaded theme
+packages, owner permissions on Shellux files, and orphaned live-renderer
+processes.
+
+The scan is local, read-only, and does not access the network. Repairs are shown
+only for targets Shellux can identify safely and always require confirmation.
+Theme repair may download a verified package; permission repair never uses
+administrator privileges. Open a new terminal tab after repairing shell
+integration.
+
+## Everyday commands
 
 | Command | Action |
 | --- | --- |
-| `shx` | Bring back the header and clear scrollback |
-| `shellux off` / `shellux on` | Disable or enable the header in the current tab |
-| `shellux doctor` | Check your installation |
-| `shellux help` | Show all commands |
+| `shx` | Bring back the header and clear scrollback. |
+| `shellux settings` | Open the visual settings menu. |
+| `shellux reload` | Restart the live header. |
+| `shellux off` / `shellux on` | Hide or restore the header in the current tab. |
+| `shellux status` | Show the current theme and refresh settings. |
+| `shellux doctor` | Check the local installation and renderer state. |
+| `shellux spotify` | Open keyboard-driven Spotify controls. |
+| `shellux help` | List every command and customization option. |
 
-The header pauses while commands run so their output stays readable and scrollable.
+The header pauses while commands run so output remains readable and scrollable.
 Bring it back with `shx` or `shellux reload`.
-Customization commands remain available as an alternative to the settings menu.
 
-## Good to know
+## Platform notes
 
-- Up to **11 menu slots**; empty categories disappear automatically.
-- Some metrics depend on your system and permissions. Unavailable values appear as `N/A`.
-- Spotify requires the desktop app and may need macOS Automation permission.
-- Thermal shows thermal state, not a temperature in °C. Optional setup with `shellux thermal enable` requires administrator privileges.
-- Background colors require a terminal that supports changing them.
+- Some metrics depend on the operating system, hardware, and permissions.
+- Spotify requires the desktop app and may request macOS Automation permission.
+- Background colors require a terminal with OSC 11 support.
+- Shellux preserves your existing prompt; prompt appearance and behavior remain
+  the responsibility of your shell configuration.
 
 ## Development
 
-Requires **Go 1.27.2 or later**. On macOS, the Xcode Command Line Tools are also required.
-From the cloned repository:
+Development requires **Go 1.27.2 or later**. On macOS, install the Xcode Command
+Line Tools as well.
+
+From a cloned repository:
 
 ```sh
 go mod verify
@@ -207,14 +295,12 @@ sh scripts/install_test.sh
 sh -n scripts/install.sh scripts/install-release.sh
 ```
 
-[CI](.github/workflows/ci.yml) also tests shell integration and the interactive settings menu on macOS and Linux.
+[CI](.github/workflows/ci.yml) also checks formatting, builds Shellux, and tests
+shell integration, profile transitions, mouse routing, concurrent rendering,
+and the interactive settings menu on macOS and Linux.
 
-To publish your own theme packages, see the [guide](themes/README.md).
+To publish your own theme packages, see the [theme guide](themes/README.md).
 
-## License
-
-Shellux is licensed under the [PolyForm Noncommercial License 1.0.0](LICENSE).
-You may use, modify, and redistribute the code for noncommercial purposes.
-Commercial use or sale requires separate permission from the copyright holder.
-Shellux is **source-available**, rather than open source in the formal sense.
-Rights to third-party graphics and other content remain with their respective owners.
+Shellux is source-available under the
+[PolyForm Noncommercial License 1.0.0](LICENSE). Commercial use or sale requires
+separate permission from the copyright holder.
