@@ -11,13 +11,11 @@ prompt you already use.
 
 ### Purple theme
 
-<!-- markdownlint-disable-next-line MD034 -->
-https://github.com/user-attachments/assets/85643be6-5373-4438-8402-1df0e9101fa6
+![Purple animated Shellux theme](docs/images/theme-preview-purple.gif)
 
 ### Red theme
 
-<!-- markdownlint-disable-next-line MD034 -->
-https://github.com/user-attachments/assets/b69e6d36-a79a-4c38-81d3-5dced27ed50d
+![Red animated Shellux theme](docs/images/theme-preview-red.gif)
 
 ## What Shellux offers
 
@@ -68,8 +66,7 @@ Open the visual settings menu:
 shellux settings
 ```
 
-<!-- markdownlint-disable-next-line MD034 -->
-https://github.com/user-attachments/assets/fb08647d-20bb-4b23-b936-b83b22905ab0
+![Shellux Settings controlled with the mouse](docs/images/settings-mouse.gif)
 
 ### Mouse, touchpad, and keyboard
 
