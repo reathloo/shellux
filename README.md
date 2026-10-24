@@ -9,13 +9,15 @@ prompt you already use.
 
 ## See Shellux in action
 
-| Theme preview | Theme preview |
-| --- | --- |
-| [![Purple animated Shellux theme](docs/images/theme-preview-purple.jpg)](docs/videos/theme-preview-purple.mp4) | [![Red animated Shellux theme](docs/images/theme-preview-red.jpg)](docs/videos/theme-preview-red.mp4) |
-| [Watch the purple theme](docs/videos/theme-preview-purple.mp4) | [Watch the red theme](docs/videos/theme-preview-red.mp4) |
+### Purple theme
 
-The previews show real animated themes running in the terminal. Click either
-image to watch the video.
+<!-- markdownlint-disable-next-line MD034 -->
+https://github.com/user-attachments/assets/85643be6-5373-4438-8402-1df0e9101fa6
+
+### Red theme
+
+<!-- markdownlint-disable-next-line MD034 -->
+https://github.com/user-attachments/assets/b69e6d36-a79a-4c38-81d3-5dced27ed50d
 
 ## What Shellux offers
 
@@ -66,9 +68,8 @@ Open the visual settings menu:
 shellux settings
 ```
 
-[![Shellux Settings controlled with the mouse](docs/images/settings-mouse.jpg)](docs/videos/settings-mouse.mp4)
-
-[Watch the Settings and mouse-control demo](docs/videos/settings-mouse.mp4)
+<!-- markdownlint-disable-next-line MD034 -->
+https://github.com/user-attachments/assets/fb08647d-20bb-4b23-b936-b83b22905ab0
 
 ### Mouse, touchpad, and keyboard
 
