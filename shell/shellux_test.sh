@@ -30,7 +30,7 @@ if [[ "$1" == bash ]]; then
   PROMPT_COMMAND=(foreign_prompt_one foreign_prompt_two)
   shellux_integration_version=19
   source "shell/shellux.bash"
-  equal "$shellux_integration_version" 28 'existing Bash integration upgrades'
+  equal "$shellux_integration_version" 30 'existing Bash integration upgrades'
   eval "${PROMPT_COMMAND[0]}"
   equal "$shellux_previous_debug_trap" foreign_debug_hook 'existing Bash DEBUG hook is preserved'
   case "$(trap -p DEBUG)" in
@@ -54,7 +54,7 @@ if [[ "$1" == zsh ]]; then
   add-zsh-hook precmd foreign_precmd_hook
   shellux_integration_version=19
   source "shell/shellux.zsh"
-  equal "$shellux_integration_version" 28 'existing Zsh integration upgrades'
+  equal "$shellux_integration_version" 30 'existing Zsh integration upgrades'
   [[ " ${preexec_functions[*]} " == *' foreign_preexec_hook '* ]] || fail 'existing Zsh preexec hook was removed'
   [[ " ${precmd_functions[*]} " == *' foreign_precmd_hook '* ]] || fail 'existing Zsh precmd hook was removed'
 fi
@@ -173,6 +173,10 @@ SHELLUX_SETTINGS_TEST_CODE=1
 shellux settings >/dev/null || fail 'intentional cancellation failed'
 equal "$watch_starts" 1 'cancelled settings do not reload'
 equal "$shellux_output_mode" 1 'cancelled settings keep output readable'
+SHELLUX_SETTINGS_TEST_CODE=3
+shellux settings >/dev/null || fail 'successful uninstall reported failure'
+equal "$watch_starts" 1 'uninstalled settings do not restart renderer'
+equal "$shellux_output_mode" 1 'uninstalled settings keep output readable'
 for settings_code in 2 130; do
   SHELLUX_SETTINGS_TEST_CODE=$settings_code
   settings_result=0

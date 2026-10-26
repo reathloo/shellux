@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/reathloo/shellux/internal/animation"
+	"github.com/reathloo/shellux/internal/appupdate"
 	"github.com/reathloo/shellux/internal/config"
 	"github.com/reathloo/shellux/internal/live"
 	"github.com/reathloo/shellux/internal/locale"
@@ -185,6 +186,35 @@ func runCommand(args []string) bool {
 		return false
 	}
 	switch args[0] {
+	case "update":
+		if len(args) > 2 || (len(args) == 2 && args[1] != "--check" && args[1] != "--auto") {
+			commandUsage("shellux update [--check]")
+		}
+		if len(args) == 2 && args[1] == "--auto" {
+			runAutomaticUpdate()
+			return true
+		}
+		client, err := appupdate.DefaultClient()
+		if err != nil {
+			commandError("update", err)
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+		defer cancel()
+		install := len(args) == 1
+		result, err := client.Run(ctx, version.Value, install)
+		if err != nil {
+			commandError("update", err)
+		}
+		if result.Updated {
+			fmt.Printf("shellux: updated from v%s to v%s; open a new terminal tab to load the new shell integration\n", result.Current, result.Latest)
+		} else if result.Latest == result.Current {
+			fmt.Printf("shellux: v%s is already current\n", result.Current)
+		} else if install {
+			fmt.Printf("shellux: v%s is newer than the latest stable release v%s; no downgrade performed\n", result.Current, result.Latest)
+		} else {
+			fmt.Printf("shellux: stable update available: v%s → v%s; run 'shellux update' to install it\n", result.Current, result.Latest)
+		}
+		return true
 	case "mouse":
 		if len(args) != 3 {
 			commandUsage("shellux mouse <column> <row>")
@@ -242,6 +272,13 @@ func runCommand(args []string) bool {
 				settings = settings.EffectiveProfile(directory)
 			}
 			emitBackground(settings.Background)
+		}
+		if code == settingsui.Uninstalled {
+			fmt.Println("shellux: uninstalled; open a new terminal tab to finish")
+			if os.Getenv("SHELLUX_DIAG_VERSION") != "" {
+				os.Exit(code)
+			}
+			return true
 		}
 		if code != 0 {
 			os.Exit(code)
@@ -575,6 +612,8 @@ const commandHelp = `Shellux commands:
   shellux on                      restore the header in this terminal tab
   shellux status                  show current theme and refresh settings
   shellux doctor                  check setup and renderer state
+  shellux update                  install the latest verified stable release
+  shellux update --check          check without installing
   shellux spotify                 open interactive Spotify controls
   shellux exit                    exit the current shell
 
@@ -615,6 +654,31 @@ const commandHelp = `Shellux commands:
   shellux menu reset              restore the default selection
   shellux thermal enable          authorize and show the macOS thermal state
 `
+
+func runAutomaticUpdate() {
+	settings, err := config.LoadDefault()
+	if err != nil || !settings.AutomaticUpdates {
+		return
+	}
+	client, err := appupdate.DefaultClient()
+	if err != nil {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+	if _, err := client.Auto(ctx, version.Value); err != nil {
+		return
+	}
+	store, err := themepack.DefaultStore()
+	if err != nil {
+		return
+	}
+	catalog, err := store.Refresh(ctx)
+	if err != nil {
+		return
+	}
+	_, _ = store.UpdateInstalled(ctx, catalog)
+}
 
 func statusReport(settings config.Config, themes []config.ThemeInfo) string {
 	matching := make([]string, 0)

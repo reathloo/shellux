@@ -84,6 +84,48 @@ func chooseRow(t *testing.T, m *model, action, value string) {
 	t.Fatalf("missing row %s %s", action, value)
 }
 
+func TestAutomaticUpdatesToggle(t *testing.T) {
+	c := config.Default()
+	m := newModel(c, func(config.Config) error { return nil })
+	m.section = generalSection
+	for i, r := range m.rows() {
+		if r.action == "automatic-updates" {
+			m.cursors[generalSection] = i
+			m.activate()
+			if m.draft.AutomaticUpdates {
+				t.Fatal("automatic updates were not disabled")
+			}
+			if !m.dirty() {
+				t.Fatal("automatic update change was not tracked")
+			}
+			return
+		}
+	}
+	t.Fatal("automatic update setting is missing")
+}
+
+func TestShelluxUninstallRequiresTwoConfirmations(t *testing.T) {
+	m := newModel(config.Default(), func(config.Config) error { t.Fatal("uninstall must not save settings"); return nil })
+	m.section = generalSection
+	called := 0
+	m.uninstall = func() error { called++; return nil }
+	chooseRow(t, m, "uninstall-shellux", "")
+	press(m, "enter")
+	if m.modal == nil || m.modal.action != "uninstall-shellux" || called != 0 {
+		t.Fatal("first uninstall confirmation missing")
+	}
+	press(m, "right")
+	press(m, "enter")
+	if m.modal == nil || m.modal.action != "uninstall-shellux-final" || called != 0 {
+		t.Fatal("second uninstall confirmation missing")
+	}
+	press(m, "right")
+	press(m, "enter")
+	if called != 1 || !m.done || m.result != Uninstalled {
+		t.Fatalf("uninstall result: called=%d done=%v result=%d", called, m.done, m.result)
+	}
+}
+
 func TestThemeFavoriteAndUninstallControls(t *testing.T) {
 	t.Setenv("XDG_DATA_HOME", t.TempDir())
 	entry, ok := themepack.Lookup("purplemonster")

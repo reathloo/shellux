@@ -118,10 +118,12 @@ Für einen eigenen HTTPS-Katalog kann `SHELLUX_THEME_CATALOG_URL` gesetzt werden
 Relative Paketpfade werden unter derselben Adresse aufgelöst. Dieser Override
 wird auch für isolierte Tests genutzt.
 
-Installierte Versionen bleiben lokal festgehalten und werden nur beim Öffnen des
-Theme-Bereichs aktualisiert, nicht bei jedem Header-Start. Eigene gespeicherte
-Theme-Kombinationen bleiben erhalten; heruntergeladen werden ansonsten nur Pakete
-der aktiven Kombination.
+Installierte Versionen bleiben lokal festgehalten und werden beim Öffnen des
+Theme-Bereichs oder durch die höchstens einmal tägliche Hintergrundprüfung
+aktualisiert, nicht bei jedem Header-Rendern. Diese Prüfung kann unter
+`Settings → General → Automatic updates` abgeschaltet werden. Eigene
+gespeicherte Theme-Kombinationen bleiben erhalten; heruntergeladen werden
+ansonsten nur Pakete der aktiven Kombination.
 
 Die Tests prüfen Pakete, Offline-Nutzung, Downloadfehler, Abbruch und
 Konfigurationskonflikte. Der PTY-Test prüft Zsh/Bash mit einem lokal installierten

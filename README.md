@@ -42,6 +42,13 @@ The installer detects your operating system and processor architecture,
 verifies the archive with SHA-256, installs Shellux under `~/.local`, and adds
 the integration to Zsh or Bash. Open a new terminal tab when it finishes.
 
+When an integrated shell starts, Shellux checks at most once per day in the
+background for a newer stable release. It installs only the matching
+macOS/Linux archive after SHA-256 verification. Turn this off under
+**Settings → General → Automatic updates**. Use
+`shellux update --check` for a read-only check or `shellux update` to update
+immediately.
+
 <details>
 <summary><strong>Manual installation</strong></summary>
 
@@ -99,12 +106,17 @@ shellux settings
 | **Menu layouts** | Choose automatic/manual profiles and manage saved layouts. |
 | **Themes** | Preview, select, favorite, install, update, or uninstall themes. |
 | **Appearance** | Combine animations, styles, colors, and backgrounds. |
-| **General** | Select language and refresh behavior. |
+| **General** | Select language, refresh behavior, automatic updates, or fully uninstall Shellux. |
 | **Doctor** | Scan the local installation and offer safe repairs. |
 
 Shellux supports up to **11 visible menu slots**. Empty categories disappear.
 Press `M` to move the selected section, row, or detail switch; use the arrow
 keys to position it and `Enter` to finish.
+
+**General → Uninstall Shellux…** removes the shell integration, executable,
+settings, downloaded themes, and update data after two confirmations. Existing
+terminal tabs stop rendering Shellux; open a new tab to finish with a clean
+shell session.
 
 ## Profiles
 
@@ -186,7 +198,8 @@ panel from `shellux spotify`; press `T` there to toggle playback.
 Downloaded themes remain available offline. Press `F` in **Themes** to favorite
 a theme or `U` to uninstall an inactive downloaded theme after confirmation.
 Opening **Themes** checks installed packages for verified catalog updates; the
-live header itself stays offline.
+daily background update also caches newly published catalog themes. The live
+header renderer itself stays offline.
 
 To create and publish theme packages, see the [theme guide](themes/README.md).
 
@@ -211,6 +224,7 @@ permission repair never uses administrator privileges.
 | `shellux off` / `shellux on` | Hide or restore the header in this tab. |
 | `shellux status` | Show theme and refresh settings. |
 | `shellux doctor` | Check the local installation and renderer state. |
+| `shellux update [--check]` | Install or only check for a verified stable release. |
 | `shellux spotify` | Open keyboard-driven Spotify controls. |
 | `shellux help` | List all commands and customization options. |
 

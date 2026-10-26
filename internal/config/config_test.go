@@ -102,6 +102,9 @@ func TestDefault(t *testing.T) {
 	if !config.Visible["spotify"] || !config.Visible["progress"] || !config.Visible["uptime"] || config.Visible["temperature"] {
 		t.Fatalf("Default().Visible = %v, want spotify, progress and uptime enabled and thermal disabled", config.Visible)
 	}
+	if !config.AutomaticUpdates {
+		t.Fatal("automatic updates should be enabled by default")
+	}
 	if err := config.Validate(); err != nil {
 		t.Fatalf("Default().Validate() error = %v", err)
 	}
@@ -124,8 +127,21 @@ func TestLoad(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
+	if !config.AutomaticUpdates {
+		t.Fatal("legacy config should inherit automatic updates")
+	}
 	if config.Interval().String() != "2s" || config.Visible["battery"] || config.Visible["temperature"] != false || !config.Visible["cpu"] {
 		t.Fatalf("Load() = %+v", config)
+	}
+}
+
+func TestLoadCanDisableAutomaticUpdates(t *testing.T) {
+	settings, err := decodeConfig([]byte(`{"automatic_updates":false}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if settings.AutomaticUpdates {
+		t.Fatal("explicitly disabled automatic updates were re-enabled")
 	}
 }
 

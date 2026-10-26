@@ -52,6 +52,7 @@ type Config struct {
 	Animation              string                     `json:"animation"`
 	Style                  string                     `json:"style"`
 	RefreshInterval        string                     `json:"refresh_interval"`
+	AutomaticUpdates       bool                       `json:"automatic_updates"`
 	Visible                map[string]bool            `json:"visible"`
 	MenuLayout             MenuLayout                 `json:"menu_layout"`
 	MenuPresets            map[string]SavedMenuPreset `json:"menu_presets,omitempty"`
@@ -74,6 +75,7 @@ func Default() Config {
 		Animation:        base.Animation,
 		Style:            base.Style,
 		RefreshInterval:  "1s",
+		AutomaticUpdates: true,
 		ProfileSelection: "manual",
 		Visible:          defaultVisibility(),
 		MenuLayout:       defaultMenuLayout(),
@@ -246,17 +248,18 @@ func Themes() ([]ThemeInfo, error) {
 
 // ThemeOptions lists choices from this working configuration without disk access.
 func (c Config) ThemeOptions() []ThemeInfo {
-	defaults := Default()
+	available := availableThemes()
+	base := available["shelluxdefault"]
 	result := []ThemeInfo{
-		{Name: "default", Animation: defaults.Animation, Style: DisplayStyle(defaults.Style), Background: defaults.Background},
+		{Name: "default", Animation: base.Animation, Style: DisplayStyle(base.Style), Background: base.Background},
 	}
-	builtInNames := make([]string, 0, len(availableThemes()))
-	for name := range availableThemes() {
+	builtInNames := make([]string, 0, len(available))
+	for name := range available {
 		builtInNames = append(builtInNames, name)
 	}
 	sort.Strings(builtInNames)
 	for _, name := range builtInNames {
-		entry := availableThemes()[name]
+		entry := available[name]
 		result = append(result, ThemeInfo{Name: name, Animation: entry.Animation, Style: DisplayStyle(entry.Style), Background: entry.Background})
 	}
 	customNames := make([]string, 0, len(c.Themes))

@@ -39,6 +39,7 @@ func window(length, selected, height int) (int, int) {
 	return start, min(length, start+height)
 }
 func (m *model) View() tea.View {
+	defer m.endRowsFrame()
 	width, height := max(1, m.width), max(1, m.height)
 	styles := m.styles()
 	var block string

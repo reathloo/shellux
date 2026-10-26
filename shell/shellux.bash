@@ -4,8 +4,8 @@
 # Define the alias before DEBUG is installed, so startup does not pause itself.
 alias shx='shellux reload'
 
-if ! declare -F shellux_prompt >/dev/null 2>&1 || (( ${shellux_integration_version:-0} < 28 )); then
-  shellux_integration_version=28
+if ! declare -F shellux_prompt >/dev/null 2>&1 || (( ${shellux_integration_version:-0} < 30 )); then
+  shellux_integration_version=30
   : "${shellux_enabled:=1}"
   : "${shellux_render_header:=1}"
   : "${shellux_clear_startup_scrollback:=1}"
@@ -176,6 +176,7 @@ if ! declare -F shellux_prompt >/dev/null 2>&1 || (( ${shellux_integration_versi
         if (( shellux_enabled )); then shellux_reload; fi
         ;;
       1) return 0 ;; # Deliberate cancellation is a normal shell completion.
+      3) return 0 ;; # Shellux was uninstalled; do not restart its renderer.
       *) return "$settings_result" ;;
     esac
   }
@@ -203,7 +204,7 @@ if ! declare -F shellux_prompt >/dev/null 2>&1 || (( ${shellux_integration_versi
         command "${SHELLUX_BIN:-shellux}" "$@" || return $?
         if (( shellux_enabled )); then shellux_reload; fi
         ;;
-      help|themes|styles|animations|status|doctor)
+      help|themes|styles|animations|status|doctor|update)
         shellux_show_output "$@"
         ;;
       off)
@@ -340,3 +341,10 @@ if ! declare -F shellux_prompt >/dev/null 2>&1 || (( ${shellux_integration_versi
     esac
   fi
 fi
+
+shellux_in_prompt=1
+command "${SHELLUX_BIN:-shellux}" update --auto </dev/null >/dev/null 2>&1 &
+shellux_update_pid=$!
+disown "$shellux_update_pid" 2>/dev/null || true
+unset shellux_update_pid
+shellux_in_prompt=0

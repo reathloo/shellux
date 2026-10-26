@@ -33,7 +33,9 @@ def check(shell):
         pid, fd = pty.fork()
         if pid == 0:
             os.chdir(root)
-            os.environ.update(XDG_CONFIG_HOME=temporary, SHELLUX_BIN=BINARY, TERM="xterm-256color")
+            os.environ.update(XDG_CONFIG_HOME=temporary, XDG_DATA_HOME=temporary,
+                              SHELLUX_RELEASE_BASE_URL="https://127.0.0.1:1",
+                              SHELLUX_BIN=BINARY, TERM="xterm-256color")
             os.environ.pop("NO_COLOR", None)
             argv = ["zsh", "-f"] if shell == "zsh" else ["bash", "--noprofile", "--norc", "-i"]
             os.execvp(shell, argv)

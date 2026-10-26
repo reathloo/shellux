@@ -18,14 +18,17 @@ import (
 	"github.com/reathloo/shellux/internal/animation"
 	"github.com/reathloo/shellux/internal/config"
 	"github.com/reathloo/shellux/internal/doctor"
+	"github.com/reathloo/shellux/internal/locale"
 	"github.com/reathloo/shellux/internal/terminal"
 	"github.com/reathloo/shellux/internal/themepack"
+	"github.com/reathloo/shellux/internal/uninstall"
 )
 
 const (
 	Saved       = 0
 	Cancelled   = 1
 	Failed      = 2
+	Uninstalled = 3
 	Interrupted = 130
 )
 
@@ -57,6 +60,13 @@ func Run() (int, config.Config, error) {
 		fmt.Fprint(os.Stdout, terminal.Background(restoreBackground))
 	}()
 	m.ensure = func(ctx context.Context, c config.Config) error { return c.EnsurePackages(ctx) }
+	m.uninstall = func() error {
+		plan, err := uninstall.DefaultPlan()
+		if err != nil {
+			return err
+		}
+		return plan.Run()
+	}
 	m.refresh = true
 	defer func() {
 		if m.cancelDoctor != nil {
@@ -167,6 +177,12 @@ type model struct {
 	cancelDoctor            context.CancelFunc
 	doctorScan              func(context.Context) []doctor.Check
 	doctorFix               func(context.Context, string) error
+	uninstall               func() error
+	resolvedLanguageValue   string
+	resolvedLanguage        locale.Language
+	cacheRows               bool
+	cachedRowsSection       int
+	cachedRows              []row
 }
 
 func newModel(c config.Config, save func(config.Config) error) *model {
@@ -229,6 +245,7 @@ func (m *model) cancel() tea.Cmd {
 }
 
 func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	m.beginRowsFrame()
 	switch msg := msg.(type) {
 	case animationPreviewTick:
 		if msg.generation != m.previewGeneration || m.modal == nil || m.modal.field != "animation" || m.previewAnimation == nil {
@@ -452,6 +469,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					if err := m.draft.ToggleFavoriteTheme(r.value); err != nil {
 						m.notice = friendly(err)
 					} else {
+						m.invalidateRows()
 						m.selectThemeRow(r.value)
 					}
 				}
@@ -491,6 +509,18 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m *model) rows() []row {
+	if m.cacheRows && m.cachedRows != nil && m.cachedRowsSection == m.section {
+		return m.cachedRows
+	}
+	rows := m.buildRows()
+	if m.cacheRows {
+		m.cachedRowsSection = m.section
+		m.cachedRows = rows
+	}
+	return rows
+}
+
+func (m *model) buildRows() []row {
 	switch m.section {
 	case 0:
 		rows := []row{}
@@ -566,7 +596,8 @@ func (m *model) rows() []row {
 		return rows
 	case themesSection:
 		rows := []row{}
-		for _, t := range m.draft.ThemeOptions() {
+		themes := m.draft.ThemeOptions()
+		for _, t := range themes {
 			desc := fmt.Sprintf(m.tr("Animation: %s · Style: %s · Background: %s"), t.Animation, t.Style, config.DisplayBackground(t.Background))
 			if t.Custom {
 				desc += m.tr(" · Delete: remove custom theme")
@@ -597,7 +628,7 @@ func (m *model) rows() []row {
 			}
 			rows = append(rows, row{label: mark + " " + favorite + t.Name + " · " + kind, action: "theme", value: t.Name, color: t.Background, custom: t.Custom, description: desc})
 		}
-		rows = append(rows, row{label: "Random combination", action: "random", description: "Combine an animation with a random style and matching background."}, row{label: "Save current combination as a theme…", action: "new", description: fmt.Sprintf(m.tr("Current: %s · %s · %s. Save as a custom theme."), m.draft.Animation, config.DisplayStyle(m.draft.Style), m.draft.BackgroundName())})
+		rows = append(rows, row{label: "Random combination", action: "random", description: "Combine an animation with a random style and matching background."}, row{label: "Save current combination as a theme…", action: "new", description: fmt.Sprintf(m.tr("Current: %s · %s · %s. Save as a custom theme."), m.draft.Animation, config.DisplayStyle(m.draft.Style), backgroundName(m.draft.Background, themes))})
 		return rows
 	case appearanceSection:
 		return []row{
@@ -626,8 +657,33 @@ func (m *model) rows() []row {
 		}
 		return rows
 	default:
-		return []row{{label: "Refresh interval", action: "interval", value: m.draft.RefreshInterval, description: "A positive Go duration, such as 1s, 500ms or 2.5s."}, {label: "Language", action: "language", value: languageName(m.draft.Language), description: "Choose the dashboard and settings language. Automatic follows your system locale."}}
+		updates := m.tr("Off")
+		if m.draft.AutomaticUpdates {
+			updates = m.tr("On")
+		}
+		return []row{
+			{label: "Refresh interval", action: "interval", value: m.draft.RefreshInterval, description: "A positive Go duration, such as 1s, 500ms or 2.5s."},
+			{label: "Language", action: "language", value: languageName(m.draft.Language), description: "Choose the dashboard and settings language. Automatic follows your system locale."},
+			{label: "Automatic updates", action: "automatic-updates", value: updates, description: "When a shell starts, check at most once a day and install verified stable releases and theme updates."},
+			{label: "Uninstall Shellux…", action: "uninstall-shellux", description: "Remove Shellux, its shell integration, settings, downloaded themes and update data from this user account."},
+		}
 	}
+}
+
+func backgroundName(background string, themes []config.ThemeInfo) string {
+	name := config.DisplayBackground(background)
+	if name != background {
+		return name
+	}
+	for _, theme := range themes {
+		if theme.Custom && theme.Background == background {
+			return theme.Name
+		}
+	}
+	if background == "default" {
+		return "Profile color"
+	}
+	return name
 }
 
 func (m *model) selectThemeRow(name string) {
@@ -678,9 +734,11 @@ func (m *model) moveMenuRow(step int) {
 	switch {
 	case r.action == "group":
 		moved = m.draft.MoveMenuGroup(r.value, step)
+		m.invalidateRows()
 		m.selectMenuRow("group", r.value)
 	case r.action == "toggle":
 		moved = m.draft.MoveMenuItem(r.entry.Key, step)
+		m.invalidateRows()
 		m.selectMenuRow("toggle", r.entry.Key)
 	default:
 		return
@@ -701,6 +759,7 @@ func (m *model) moveMenuPart(step int) {
 	}
 	part := r.entry.Parts[m.part-2]
 	if m.draft.MoveDisplayPart(r.entry.Key, part, step) {
+		m.invalidateRows()
 		m.part += step
 		m.notice = "Component order changed. Save to apply it."
 	} else {
@@ -710,6 +769,7 @@ func (m *model) moveMenuPart(step int) {
 func (m *model) activate() tea.Cmd {
 	m.notice = ""
 	r := m.selectedRow()
+	m.invalidateRows()
 	switch r.action {
 	case "doctor-scan":
 		return m.runDoctorScan()
@@ -774,6 +834,10 @@ func (m *model) activate() tea.Cmd {
 		if err := m.draft.SetProfileSelection(selection); err != nil {
 			m.notice = friendly(err)
 		}
+	case "automatic-updates":
+		m.draft.AutomaticUpdates = !m.draft.AutomaticUpdates
+	case "uninstall-shellux":
+		m.modal = &dialog{kind: "confirm", title: m.tr("Uninstall Shellux completely?"), action: "uninstall-shellux"}
 	case "theme":
 		_, err := m.draft.ApplyTheme(r.value)
 		if err != nil {
@@ -954,6 +1018,20 @@ func (m *model) updateDialog(msg tea.Msg) tea.Cmd {
 			case "doctor-repair":
 				m.modal = nil
 				return m.runDoctorRepair(d.value)
+			case "uninstall-shellux":
+				m.modal = &dialog{kind: "confirm", title: m.tr("Permanently delete Shellux, all settings and all downloaded themes?"), action: "uninstall-shellux-final"}
+				return nil
+			case "uninstall-shellux-final":
+				if m.uninstall == nil {
+					m.notice = m.tr("Could not uninstall Shellux: ") + m.tr("uninstaller is unavailable")
+					break
+				}
+				if err := m.uninstall(); err != nil {
+					m.notice = m.tr("Could not uninstall Shellux completely: ") + friendly(err)
+					break
+				}
+				m.modal = nil
+				return m.finish(Uninstalled)
 			}
 			m.modal = nil
 		}

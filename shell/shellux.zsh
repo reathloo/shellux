@@ -1,8 +1,8 @@
 # Shellux integration for Zsh.
 # Source this file from .zshrc after installing the shellux binary.
 
-if (( $+functions[shellux_prompt] == 0 || ${shellux_integration_version:-0} < 28 )); then
-  typeset -g shellux_integration_version=28
+if (( $+functions[shellux_prompt] == 0 || ${shellux_integration_version:-0} < 30 )); then
+  typeset -g shellux_integration_version=30
   typeset -g shellux_enabled="${shellux_enabled:-1}"
   typeset -g shellux_render_header="${shellux_render_header:-1}"
   typeset -g shellux_clear_startup_scrollback="${shellux_clear_startup_scrollback:-1}"
@@ -246,6 +246,7 @@ if (( $+functions[shellux_prompt] == 0 || ${shellux_integration_version:-0} < 28
         if (( shellux_enabled )); then shellux_reload; fi
         ;;
       1) return 0 ;; # Deliberate cancellation is a normal shell completion.
+      3) return 0 ;; # Shellux was uninstalled; do not restart its renderer.
       *) return "$settings_result" ;;
     esac
   }
@@ -273,7 +274,7 @@ if (( $+functions[shellux_prompt] == 0 || ${shellux_integration_version:-0} < 28
         command "${SHELLUX_BIN:-shellux}" "$@" || return $?
         if (( shellux_enabled )); then shellux_reload; fi
         ;;
-      help|themes|styles|animations|status|doctor)
+      help|themes|styles|animations|status|doctor|update)
         shellux_show_output "$@"
         ;;
       off)
@@ -365,3 +366,4 @@ if (( $+functions[shellux_prompt] == 0 || ${shellux_integration_version:-0} < 28
 fi
 
 alias shx='shellux reload'
+command "${SHELLUX_BIN:-shellux}" update --auto </dev/null >/dev/null 2>&1 &!
