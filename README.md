@@ -233,7 +233,7 @@ back with `shx` or `shellux reload`.
 
 ## Development
 
-Development requires **Go 1.27.2 or later** and, on macOS, the Xcode Command
+Development requires **Go 1.27.3 or later** and, on macOS, the Xcode Command
 Line Tools.
 
 ```sh
