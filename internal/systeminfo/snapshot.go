@@ -40,6 +40,13 @@ func SnapshotInfo() (Snapshot, error) {
 // Optional details are collected only when the corresponding entry and
 // component are enabled, so hidden integrations do not run commands or probes.
 func SnapshotInfoWithDisplay(visible map[string]bool) (Snapshot, error) {
+	return snapshotInfoWithDisplay(visible, PlaybackInfo)
+}
+
+// snapshotInfoWithDisplay keeps optional playback collection behind a small
+// internal seam. Tests can verify visibility without depending on osascript
+// scheduling, while production continues to use PlaybackInfo and its timeout.
+func snapshotInfoWithDisplay(visible map[string]bool, playbackInfo func() (Playback, error)) (Snapshot, error) {
 	var cpu CPU
 	if config.EntryShown(visible, "cpu") || config.EntryShown(visible, "cores") {
 		var err error
@@ -70,7 +77,7 @@ func SnapshotInfoWithDisplay(visible map[string]bool) (Snapshot, error) {
 	}
 	var playback Playback
 	if config.EntryShown(visible, "spotify") || config.EntryShown(visible, "progress") {
-		playback, _ = PlaybackInfo()
+		playback, _ = playbackInfo()
 	}
 	var uptime Uptime
 	if config.EntryShown(visible, "uptime") {
