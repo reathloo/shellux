@@ -590,8 +590,8 @@ func (m *model) dialogView(width, height int, styles uiStyles) string {
 			b = focused.Render(b)
 		}
 		lines = append(lines, line(a+"  "+b, width))
-		if d.action != "cancel" {
-			lines = append(lines, muted.Render(line(m.tr("This change is applied permanently only when you save."), width)))
+		if notice := m.confirmationNotice(d.action); notice != "" {
+			lines = append(lines, muted.Render(line(notice, width)))
 		}
 	case "select":
 		start, end := window(len(d.choices), d.selected, available)
@@ -647,8 +647,36 @@ func (m *model) dialogView(width, height int, styles uiStyles) string {
 	if d.kind == "confirm" {
 		help = m.tr("←/→ or Tab: select · Enter: confirm · Esc: back")
 	}
-	lines = append(lines, muted.Render(line(help, width)), muted.Render(line(m.tr("The file stays unchanged until you save."), width)))
+	footer := m.tr("The file stays unchanged until you save.")
+	if d.kind == "confirm" && !confirmationWaitsForSave(d.action) {
+		footer = ""
+	}
+	lines = append(lines, muted.Render(line(help, width)), muted.Render(line(footer, width)))
 	return strings.Join(lines, "\n")
+}
+
+func (m *model) confirmationNotice(action string) string {
+	switch action {
+	case "cancel":
+		return ""
+	case "doctor-repair", "uninstall":
+		return m.tr("This action runs immediately after confirmation.")
+	case "uninstall-shellux":
+		return m.tr("No files are removed until you confirm the next warning.")
+	case "uninstall-shellux-final":
+		return m.tr("Removal starts immediately and cannot be undone.")
+	default:
+		return m.tr("This change is applied permanently only when you save.")
+	}
+}
+
+func confirmationWaitsForSave(action string) bool {
+	switch action {
+	case "cancel", "doctor-repair", "uninstall", "uninstall-shellux", "uninstall-shellux-final":
+		return false
+	default:
+		return true
+	}
 }
 
 func (m *model) animationPreviewLines(width, height int) []string {
