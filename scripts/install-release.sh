@@ -66,22 +66,58 @@ if [ "$actual_checksum" != "$expected_checksum" ]; then
   exit 1
 fi
 
-if tar -tzf "$archive" | awk '
+members="$temporary_dir/archive-members.txt"
+tar -tzf "$archive" > "$members"
+if awk '
   /^\// || /^\.\.\// || /\/\.\.\// || /\/\.\.$/ || $0 == ".." { unsafe = 1 }
   END { exit unsafe ? 0 : 1 }
-'; then
+' "$members"; then
   printf '%s\n' "shellux: archive contains an unsafe path" >&2
   exit 1
 fi
 
-extract_dir="$temporary_dir/release"
-mkdir "$extract_dir"
-tar -xzf "$archive" -C "$extract_dir"
+find_member() {
+  awk -v wanted="$1" '
+    {
+      normalized = $0
+      while (substr(normalized, 1, 2) == "./") {
+        normalized = substr(normalized, 3)
+      }
+      if (normalized == wanted) {
+        member = $0
+        count++
+      }
+    }
+    END {
+      if (count != 1) exit 1
+      print member
+    }
+  ' "$members"
+}
 
-if [ ! -x "$extract_dir/install.sh" ]; then
-  printf '%s\n' "shellux: release archive does not contain install.sh" >&2
+if ! binary_member=$(find_member shellux) ||
+   ! installer_member=$(find_member install.sh) ||
+   ! zsh_member=$(find_member shell/shellux.zsh) ||
+   ! bash_member=$(find_member shell/shellux.bash); then
+  printf '%s\n' "shellux: release archive is missing or duplicates a required file" >&2
   exit 1
 fi
+
+extract_dir="$temporary_dir/release"
+mkdir -p "$extract_dir/shell"
+tar -xOzf "$archive" "$binary_member" > "$extract_dir/shellux"
+tar -xOzf "$archive" "$installer_member" > "$extract_dir/install.sh"
+tar -xOzf "$archive" "$zsh_member" > "$extract_dir/shell/shellux.zsh"
+tar -xOzf "$archive" "$bash_member" > "$extract_dir/shell/shellux.bash"
+
+for required_file in shellux install.sh shell/shellux.zsh shell/shellux.bash; do
+  if [ ! -s "$extract_dir/$required_file" ]; then
+    printf '%s\n' "shellux: release archive contains an invalid $required_file" >&2
+    exit 1
+  fi
+done
+chmod 0755 "$extract_dir/shellux" "$extract_dir/install.sh"
+chmod 0644 "$extract_dir/shell/shellux.zsh" "$extract_dir/shell/shellux.bash"
 
 printf '%s\n' "Verified $archive_name"
 SHELLUX_AUTO_CONFIGURE=1 "$extract_dir/install.sh"

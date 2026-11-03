@@ -139,6 +139,36 @@ SHELLUX_AUTO_CONFIGURE=1 \
   "$fixture/archive/install.sh" > "$fixture/profile-sources-repeated-output"
 test "$(grep -c '.bashrc' "$fixture/profile-sources-home/.bash_profile" || true)" -eq 0
 
+malicious_archive="$fixture/malicious-archive"
+malicious_release="$fixture/malicious-release"
+mkdir -p "$malicious_archive/shell" "$malicious_release"
+cp "$fixture/archive/shellux" "$malicious_archive/shellux"
+cp "$fixture/archive/shell/shellux.zsh" "$malicious_archive/shell/shellux.zsh"
+cp "$fixture/archive/shell/shellux.bash" "$malicious_archive/shell/shellux.bash"
+printf '%s\n' '#!/bin/sh' ": > '$fixture/symlink-installer-ran'" > "$fixture/evil-install.sh"
+chmod 0755 "$fixture/evil-install.sh"
+ln -s "$fixture/evil-install.sh" "$malicious_archive/install.sh"
+malicious_name="shellux_0.1.5_${release_os}_${release_arch}.tar.gz"
+tar -czf "$malicious_release/$malicious_name" -C "$malicious_archive" .
+if command -v sha256sum >/dev/null 2>&1; then
+  malicious_checksum=$(sha256sum "$malicious_release/$malicious_name" | awk '{ print $1 }')
+else
+  malicious_checksum=$(shasum -a 256 "$malicious_release/$malicious_name" | awk '{ print $1 }')
+fi
+printf '%s  %s\n' "$malicious_checksum" "$malicious_name" > "$malicious_release/checksums.txt"
+if SHELL=/bin/bash \
+  HOME="$fixture/bootstrap-home" \
+  SHELLUX_PREFIX="$fixture/symlink-prefix" \
+  XDG_DATA_HOME="$fixture/symlink-data" \
+  SHELLUX_RELEASE_BASE_URL="file://$malicious_release" \
+    sh "$repo_root/scripts/install-release.sh" > "$fixture/symlink-output" 2>&1; then
+  printf '%s\n' 'installer accepted a symlink for a required release file' >&2
+  exit 1
+fi
+test ! -e "$fixture/symlink-installer-ran"
+test ! -e "$fixture/symlink-prefix/bin/shellux"
+grep -F 'release archive contains an invalid install.sh' "$fixture/symlink-output" >/dev/null
+
 printf '%064d  %s\n' 0 "$archive_name" > "$release_dir/checksums.txt"
 if SHELL=/bin/bash \
   HOME="$fixture/bootstrap-home" \
