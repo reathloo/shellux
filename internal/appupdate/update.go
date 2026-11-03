@@ -278,10 +278,13 @@ func releaseFiles(archive []byte) (map[string][]byte, error) {
 		if clean != header.Name || path.IsAbs(clean) || clean == ".." || strings.HasPrefix(clean, "../") {
 			return nil, fmt.Errorf("release archive contains unsafe path %q", header.Name)
 		}
+		if header.Size < 0 || header.Size > maxArchiveBytes {
+			return nil, fmt.Errorf("release archive contains oversized file %q", clean)
+		}
 		if !wanted[clean] {
 			continue
 		}
-		if header.Typeflag != tar.TypeReg || header.Size < 1 || header.Size > maxArchiveBytes {
+		if header.Typeflag != tar.TypeReg || header.Size < 1 {
 			return nil, fmt.Errorf("invalid release file %q", clean)
 		}
 		if _, exists := result[clean]; exists {
@@ -384,7 +387,8 @@ func (c *Client) due() bool {
 	if json.Unmarshal(b, &saved) != nil || saved.CheckedAt.IsZero() {
 		return true
 	}
-	return c.now().Sub(saved.CheckedAt) >= checkInterval
+	elapsed := c.now().Sub(saved.CheckedAt)
+	return elapsed < 0 || elapsed >= checkInterval
 }
 
 func (c *Client) markChecked() error {

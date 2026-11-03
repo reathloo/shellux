@@ -151,6 +151,36 @@ func TestUnsafeArchiveIsRejected(t *testing.T) {
 	}
 }
 
+func TestOversizedIgnoredArchiveEntryIsRejected(t *testing.T) {
+	var buffer bytes.Buffer
+	gz := gzip.NewWriter(&buffer)
+	tarWriter := tar.NewWriter(gz)
+	if err := tarWriter.WriteHeader(&tar.Header{Name: "README.md", Mode: 0644, Size: maxArchiveBytes + 1, Typeflag: tar.TypeReg}); err != nil {
+		t.Fatal(err)
+	}
+	// The header is sufficient for releaseFiles to reject the entry before it
+	// attempts to consume a potentially expensive decompression stream.
+	_ = tarWriter.Close()
+	if err := gz.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := releaseFiles(buffer.Bytes()); err == nil {
+		t.Fatal("oversized ignored archive entry was accepted")
+	}
+}
+
+func TestFutureCheckTimestampDoesNotDisableUpdates(t *testing.T) {
+	now := time.Date(2026, 11, 3, 12, 0, 0, 0, time.UTC)
+	statePath := filepath.Join(t.TempDir(), "update.json")
+	client := Client{StatePath: statePath, Now: func() time.Time { return now }}
+	if err := atomicWrite(statePath, []byte(`{"checked_at":"2026-11-04T12:00:00Z"}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if !client.due() {
+		t.Fatal("future timestamp disabled automatic updates")
+	}
+}
+
 func testArchive(t *testing.T, files map[string]string) []byte {
 	t.Helper()
 	var buffer bytes.Buffer
