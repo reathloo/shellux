@@ -27,9 +27,12 @@ jobs:
       - name: Verify release source
         run: |
           go mod verify
+          go mod tidy
+          git diff --exit-code -- go.mod go.sum
           test -z "$(gofmt -l cmd internal tools)"
           go run ./tools/theme-pack -check
           go test ./...
+          go test -race ./...
           go vet ./...
           sh scripts/install_test.sh
           sh -n scripts/install.sh scripts/install-release.sh
@@ -38,6 +41,8 @@ jobs:
           python3 shell/profile_pty_test.py "$RUNNER_TEMP/shellux"
           python3 shell/settings_pty_test.py "$RUNNER_TEMP/shellux"
           python3 shell/mouse_pty_test.py
+          go build -race -o "$RUNNER_TEMP/shellux-race" ./cmd/shellux
+          python3 shell/watch_pty_test.py "$RUNNER_TEMP/shellux-race"
 
       - name: Publish release
         uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7
