@@ -91,12 +91,30 @@ func TestFocusTimerStartsWhenSettingsAreSaved(t *testing.T) {
 func TestGermanProfileRowsFitTerminal(t *testing.T) {
 	c := config.Default()
 	c.Language = "de"
+	c.ProfileSelection = "manual"
+	c.SelectedProfile = "focus"
+	c.FocusUntil = time.Now().Add(30 * time.Minute).Format(time.RFC3339Nano)
 	m := newModel(c, func(config.Config) error { return nil })
 	m.section = presetsSection
 	chooseRow(t, m, "profile", "presentation")
 	view := ansi.Strip(m.View().Content)
 	if !strings.Contains(view, "Preset-Vorlagen") || !strings.Contains(view, "Präsentation") || !strings.Contains(view, "Auswahl") {
 		t.Fatalf("German profile UI missing: %s", view)
+	}
+	wantDescriptions := map[string]string{
+		"remote":   "eingehende SSH-Sitzungen",
+		"focus":    "graue Blockuhr",
+		"snapshot": "feste Diagnoseansicht",
+	}
+	for profile, want := range wantDescriptions {
+		chooseRow(t, m, "profile", profile)
+		description := m.tr(m.selectedRow().description)
+		if !strings.Contains(description, want) {
+			t.Fatalf("German %s description missing: %q", profile, description)
+		}
+		if profile == "focus" && (!strings.Contains(description, "Noch etwa 30 Minuten") || strings.Contains(description, "About")) {
+			t.Fatalf("German focus remaining time missing: %q", description)
+		}
 	}
 	for _, size := range [][2]int{{96, 30}, {64, 18}} {
 		m.width, m.height = size[0], size[1]

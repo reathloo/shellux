@@ -584,7 +584,7 @@ func (m *model) buildRows() []row {
 			} else if name == "focus" {
 				description = "Focus shows CPU, memory, Spotify and playback progress. Choose a timer; a quiet gray block clock replaces the animation. The previous layout and theme return when time is up."
 				if remaining := m.draft.FocusRemaining(time.Now()); remaining > 0 {
-					description += fmt.Sprintf(" About %d minutes remaining.", int(remaining.Minutes()+0.999))
+					description = m.tr(description) + fmt.Sprintf(m.tr(" About %d minutes remaining."), int(remaining.Minutes()+0.999))
 				}
 			} else if name == "snapshot" {
 				description = "Snapshot captures a fixed diagnostic view for bug reports: time, Shellux version, system and resource status. Run shellux reload to capture again."
