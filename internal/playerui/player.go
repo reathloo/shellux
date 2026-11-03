@@ -187,6 +187,7 @@ func (m *model) View() tea.View {
 		content = m.tr("Make the terminal at least 48 × 14. Esc: close", "Terminal auf mindestens 48 × 14 vergrößern. Esc: schließen")
 	} else {
 		inner := min(66, width-8)
+		compact := inner < 66 || height < 18
 		title := m.tr("Shellux · Spotify player", "Shellux · Spotify-Player")
 		state := m.tr("Spotify is not running", "Spotify läuft nicht")
 		track, artist := "—", ""
@@ -209,6 +210,9 @@ func (m *model) View() tea.View {
 		labels := []string{
 			m.tr("Previous", "Vorheriger"), "−10 s", m.tr("Play/Pause", "Start/Pause"), "+10 s", m.tr("Next", "Nächster"),
 		}
+		if compact {
+			labels = []string{"⏮", "−10", "▶/❚❚", "+10", "⏭"}
+		}
 		buttons := make([]string, len(labels))
 		for index, label := range labels {
 			button := " " + label + " "
@@ -222,16 +226,20 @@ func (m *model) View() tea.View {
 		if status == "" {
 			status = m.tr("Choose an action", "Aktion auswählen")
 		}
-		lines := []string{
-			accent.Render(title), "",
-			secondary.Render(ansi.Truncate(track, inner, "…")),
-			muted.Render(ansi.Truncate(artist, inner, "…")), "",
-			muted.Render(state),
-			secondary.Render(strings.Repeat("█", filled)+strings.Repeat("░", 24-filled)) + "  " + position,
-			"", strings.Join(buttons, "  "), "",
-			muted.Render(ansi.Truncate(clean(status), inner, "…")), "",
-			muted.Render(m.tr("←/→ select · Enter run · P/B/T/F/N direct · Esc close", "←/→ wählen · Enter ausführen · P/B/T/F/N direkt · Esc schließen")),
+		trackLine := secondary.Render(ansi.Truncate(track, inner, "…"))
+		artistLine := muted.Render(ansi.Truncate(artist, inner, "…"))
+		progressLine := ansi.Truncate(secondary.Render(strings.Repeat("█", filled)+strings.Repeat("░", 24-filled))+"  "+position, inner, "…")
+		buttonLine := strings.Join(buttons, "  ")
+		statusLine := muted.Render(ansi.Truncate(clean(status), inner, "…"))
+		help := m.tr("←/→ select · Enter run · P/B/T/F/N direct · Esc close", "←/→ wählen · Enter ausführen · P/B/T/F/N direkt · Esc schließen")
+		var lines []string
+		if compact {
+			help = "←/→ · Enter · P/B/T/F/N · Esc"
+			lines = []string{accent.Render(title), trackLine, artistLine, muted.Render(state), progressLine, buttonLine, statusLine}
+		} else {
+			lines = []string{accent.Render(title), "", trackLine, artistLine, "", muted.Render(state), progressLine, "", buttonLine, "", statusLine, ""}
 		}
+		lines = append(lines, muted.Render(ansi.Truncate(help, inner, "…")))
 		body := strings.Join(lines, "\n")
 		content = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(m.colors.MutedColor).Padding(1, 2).Render(body)
 	}

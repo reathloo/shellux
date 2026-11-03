@@ -60,3 +60,23 @@ func TestPlayerViewSanitizesTrackMetadata(t *testing.T) {
 		}
 	}
 }
+
+func TestPlayerViewFitsSupportedTerminalSizes(t *testing.T) {
+	colors, err := theme.ByName("shelluxdefault")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, size := range [][2]int{{48, 14}, {56, 18}, {74, 24}, {80, 24}} {
+		m := &model{width: size[0], height: size[1], colors: colors, language: locale.German,
+			playback: systeminfo.Playback{Available: true, Title: "A long track title", Artist: "A long artist name"}}
+		lines := strings.Split(m.View().Content, "\n")
+		if len(lines) > size[1] {
+			t.Fatalf("player height at %dx%d = %d", size[0], size[1], len(lines))
+		}
+		for _, line := range lines {
+			if width := ansi.StringWidth(line); width > size[0] {
+				t.Fatalf("player width at %dx%d = %d: %q", size[0], size[1], width, line)
+			}
+		}
+	}
+}
