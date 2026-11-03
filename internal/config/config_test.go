@@ -438,6 +438,32 @@ func TestFavoriteThemesSortAndClone(t *testing.T) {
 	}
 }
 
+func TestValidateFavoriteThemes(t *testing.T) {
+	base := Default()
+	base.Themes = map[string]SavedTheme{
+		"custom": {Animation: "shelluxdefault", Style: "dark-luxury", Background: "#000000"},
+	}
+	for _, tc := range []struct {
+		name     string
+		favorite map[string]bool
+		wantErr  bool
+	}{
+		{"built-in", map[string]bool{"purplemonster": true}, false},
+		{"custom", map[string]bool{"custom": true}, false},
+		{"unknown", map[string]bool{"missing": true}, true},
+		{"default", map[string]bool{"default": true}, true},
+		{"false value", map[string]bool{"custom": false}, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			c := base.Clone()
+			c.FavoriteThemes = tc.favorite
+			if err := c.Validate(); (err != nil) != tc.wantErr {
+				t.Fatalf("Validate() error = %v, wantErr %v", err, tc.wantErr)
+			}
+		})
+	}
+}
+
 func TestSetThemeRandomUsesAvailableValues(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	selected, _, err := SetTheme("random")

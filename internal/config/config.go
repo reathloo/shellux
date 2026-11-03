@@ -492,6 +492,19 @@ func (c Config) Validate() error {
 	if err := validateMenuLayout(completeMenuLayout(c.MenuLayout)); err != nil {
 		return err
 	}
+	available := availableThemes()
+	supportedAnimations := make(map[string]bool, len(baseAnimations)+len(available))
+	for _, name := range baseAnimations {
+		supportedAnimations[name] = true
+	}
+	supportedStyles := make(map[string]bool, len(baseStyles)+len(available))
+	for _, name := range baseStyles {
+		supportedStyles[name] = true
+	}
+	for name := range available {
+		supportedAnimations[name] = true
+		supportedStyles[name] = true
+	}
 	for name, preset := range c.MenuPresets {
 		canonical, err := customMenuPresetName(name)
 		if err != nil {
@@ -512,10 +525,10 @@ func (c Config) Validate() error {
 			return err
 		}
 	}
-	if !contains(Animations(), c.Animation) {
+	if !supportedAnimations[c.Animation] {
 		return fmt.Errorf("unsupported animation %q", c.Animation)
 	}
-	if !contains(Styles(), DisplayStyle(c.Style)) {
+	if !supportedStyles[DisplayStyle(c.Style)] {
 		return fmt.Errorf("unsupported style %q", c.Style)
 	}
 	interval, err := time.ParseDuration(c.RefreshInterval)
@@ -523,13 +536,13 @@ func (c Config) Validate() error {
 		return fmt.Errorf("invalid refresh interval %q", c.RefreshInterval)
 	}
 	for name, saved := range c.Themes {
-		if _, err := customThemeName(name); err != nil {
+		if _, err := customThemeNameWithAvailable(name, available); err != nil {
 			return err
 		}
-		if !contains(Animations(), saved.Animation) {
+		if !supportedAnimations[saved.Animation] {
 			return fmt.Errorf("theme %q has unsupported animation %q", name, saved.Animation)
 		}
-		if !contains(Styles(), DisplayStyle(saved.Style)) {
+		if !supportedStyles[DisplayStyle(saved.Style)] {
 			return fmt.Errorf("theme %q has unsupported style %q", name, saved.Style)
 		}
 		if _, err := BackgroundColor(saved.Background); err != nil {
@@ -540,14 +553,9 @@ func (c Config) Validate() error {
 		if !favorite {
 			return fmt.Errorf("favorite theme %q must be true", name)
 		}
-		found := false
-		for _, option := range c.ThemeOptions() {
-			if option.Name == name {
-				found = true
-				break
-			}
-		}
-		if !found || name == "default" {
+		_, builtIn := available[name]
+		_, custom := c.Themes[name]
+		if !builtIn && !custom {
 			return fmt.Errorf("unknown favorite theme %q", name)
 		}
 	}
@@ -571,6 +579,10 @@ func DisplayStyle(name string) string {
 }
 
 func customThemeName(name string) (string, error) {
+	return customThemeNameWithAvailable(name, availableThemes())
+}
+
+func customThemeNameWithAvailable(name string, available map[string]SavedTheme) (string, error) {
 	name = canonicalThemeName(name)
 	if name == "" || len(name) > 32 {
 		return "", errors.New("theme name must be 1 to 32 letters, numbers, or hyphens")
@@ -578,7 +590,7 @@ func customThemeName(name string) (string, error) {
 	if name == "default" || name == "random" || name == "new" || name == "delete" {
 		return "", fmt.Errorf("theme name %q is reserved", name)
 	}
-	if _, builtIn := availableThemes()[name]; builtIn {
+	if _, builtIn := available[name]; builtIn {
 		return "", fmt.Errorf("theme name %q is built in", name)
 	}
 	for index, character := range name {
